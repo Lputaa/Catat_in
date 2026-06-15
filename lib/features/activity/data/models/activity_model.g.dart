@@ -29,9 +29,10 @@ class ActivityModelAdapter extends TypeAdapter<ActivityModel> {
     }
     // else: null → model getter defaults to 'kebutuhan'
 
+    // Field[4] = old tags (removed, read and discard for backward compat)
+
     return ActivityModel(
       name: (fields[0] as String?) ?? 'Aktivitas',
-      tags: ((fields[4] as List?)?.cast<String>()) ?? [],
       createdAt: (fields[5] as DateTime?) ?? DateTime.now(),
       category: (fields[6] as String?) ?? 'Lainnya',
       startAt: fields[7] as DateTime?,
@@ -39,6 +40,7 @@ class ActivityModelAdapter extends TypeAdapter<ActivityModel> {
       isRunning: (fields[9] as bool?) ?? false,
       notes: fields[10] as String?,
       timeValue: resolvedTimeValue,
+      templateName: fields[12] as String?,
     );
   }
 
@@ -50,8 +52,6 @@ class ActivityModelAdapter extends TypeAdapter<ActivityModel> {
       ..write(obj.name)
       ..writeByte(3)
       ..write(obj.isProductive)
-      ..writeByte(4)
-      ..write(obj.tags)
       ..writeByte(5)
       ..write(obj.createdAt)
       ..writeByte(6)
@@ -65,7 +65,9 @@ class ActivityModelAdapter extends TypeAdapter<ActivityModel> {
       ..writeByte(10)
       ..write(obj.notes)
       ..writeByte(11)
-      ..write(obj.timeValue);
+      ..write(obj.timeValue)
+      ..writeByte(12)
+      ..write(obj.templateName);
   }
 
   @override

@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:catat_in/core/services/notification_service.dart';
 import 'package:catat_in/features/activity/data/models/activity_model.dart';
+import 'package:catat_in/features/activity/data/models/activity_template_model.dart';
 import 'package:catat_in/features/activity/domain/activity_category.dart';
 import 'package:catat_in/features/activity/domain/time_value.dart';
 import 'package:catat_in/features/activity/presentation/providers/activity_provider.dart';
+import 'package:catat_in/features/activity/presentation/providers/template_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,13 +35,6 @@ class _LogPageState extends ConsumerState<LogPage> {
 
   ActivityCategory selectedCategory = ActivityCategory.lainnya;
   ActivityCategory trackingCategory = ActivityCategory.lainnya;
-
-  // Custom tags added by user per form context
-  final finishCustomTags = <String>[];
-  final manualCustomTags = <String>[];
-  final trackingCustomTags = <String>[];
-
-  final selectedTags = <String>{};
 
   Timer? trackingTimer;
   Duration currentDuration = Duration.zero;
@@ -97,7 +93,6 @@ class _LogPageState extends ConsumerState<LogPage> {
   Future<void> showFinishDialog(ActivityModel activity) async {
     final finishNameController = TextEditingController(text: activity.name);
     final finishNotesController = TextEditingController();
-    final finishTags = <String>{};
     var finishCategory = ActivityCategory.lainnya;
     var finishTimeValue = TimeValue.fromString(activity.timeValue);
 
@@ -185,89 +180,35 @@ class _LogPageState extends ConsumerState<LogPage> {
                       }).toList(),
                     ),
                     const SizedBox(height: 12),
-                    // ── Kategori (harus dipilih sebelum tag) ──
+                    // ── Kategori ──
                     _buildCategoryDropdown(
                       value: finishCategory,
                       onChanged: (v) {
                         if (v != null) setSheet(() => finishCategory = v);
                       },
                     ),
-                    const SizedBox(height: 16),
-                    _sheetSectionLabel('Tag (Sub Kategori)'),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8, runSpacing: 8,
-                      children: [
-                        ...finishCategory.subTags.map((tag) {
-                          final sel = finishTags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag), selected: sel,
-                            onSelected: (v) {
-                              setSheet(() {
-                                if (v) { finishTags.add(tag); }
-                                else { finishTags.remove(tag); }
-                              });
-                            },
-                          );
-                        }),
-                        ...finishCustomTags.map((tag) {
-                          final sel = finishTags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag), selected: sel,
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () {
-                              setSheet(() {
-                                finishCustomTags.remove(tag);
-                                finishTags.remove(tag);
-                              });
-                            },
-                            onSelected: (v) {
-                              setSheet(() {
-                                if (v) { finishTags.add(tag); }
-                                else { finishTags.remove(tag); }
-                              });
-                            },
-                          );
-                        }),
-                        ActionChip(
-                          avatar: const Icon(Icons.add, size: 16),
-                          label: const Text('Tambah'),
-                          onPressed: () async {
-                            final tag = await _showAddTagDialog(ctx);
-                            if (tag != null && tag.isNotEmpty) {
-                              setSheet(() => finishCustomTags.add(tag));
-                            }
-                          },
-                        ),
-                      ],
-                    ),
                     const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
                         onPressed: () async {
-                          if (finishTags.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text(
-                                  'Pilih minimal 1 tag sebelum menyimpan.')),
-                            );
-                            return;
-                          }
                           await ref
                               .read(activityListProvider.notifier)
                               .finishRunningActivity(
                                 timeValue: finishTimeValue,
                                 category: finishCategory.label,
-                                tags: finishTags.toList(),
+                                name: finishNameController.text.trim().isNotEmpty
+                                    ? finishNameController.text.trim()
+                                    : null,
                                 notes: finishNotesController.text.trim(),
                               );
-                          if (finishNameController.text.trim().isNotEmpty) {
-                            await ref
-                                .read(activityListProvider.notifier)
-                                .updateActivity(activity,
-                                    name: finishNameController.text.trim());
-                          }
-                          if (!mounted) return;
+                          await NotificationService.finishTrackingNotification(
+                            finishNameController.text.trim().isNotEmpty
+                                ? finishNameController.text.trim()
+                                : activity.name,
+                            '',
+                          );
+                          if (!ctx.mounted) return;
                           Navigator.of(ctx).pop();
                         },
                         icon: const Icon(Icons.check_rounded),
@@ -311,102 +252,6 @@ class _LogPageState extends ConsumerState<LogPage> {
         );
       }).toList(),
       onChanged: onChanged,
-    );
-  }
-
-  /// Show dialog to add a custom tag. Returns tag text or null.
-  Future<String?> _showAddTagDialog(BuildContext context) async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Tambah Tag Baru'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Nama tag',
-              hintText: 'Contoh: Deep Work',
-              prefixIcon: const Icon(Icons.local_offer_rounded),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('Tambah'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// Builds the tag section for forms: sub-tags + custom tags + add button.
-  Widget _buildTagsSection({
-    required ActivityCategory category,
-    required Set<String> selectedTags,
-    required List<String> customTags,
-    required void Function(void Function()) setStateFn,
-    required BuildContext context,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8, runSpacing: 8,
-          children: [
-            ...category.subTags.map((tag) {
-              final sel = selectedTags.contains(tag);
-              return FilterChip(
-                label: Text(tag), selected: sel,
-                onSelected: (v) {
-                  setStateFn(() {
-                    if (v) { selectedTags.add(tag); }
-                    else { selectedTags.remove(tag); }
-                  });
-                },
-              );
-            }),
-            ...customTags.map((tag) {
-              final sel = selectedTags.contains(tag);
-              return FilterChip(
-                label: Text(tag), selected: sel,
-                deleteIcon: const Icon(Icons.close, size: 14),
-                onDeleted: () {
-                  setStateFn(() {
-                    customTags.remove(tag);
-                    selectedTags.remove(tag);
-                  });
-                },
-                onSelected: (v) {
-                  setStateFn(() {
-                    if (v) { selectedTags.add(tag); }
-                    else { selectedTags.remove(tag); }
-                  });
-                },
-              );
-            }),
-            ActionChip(
-              avatar: const Icon(Icons.add, size: 16),
-              label: const Text('Tambah'),
-              onPressed: () async {
-                final tag = await _showAddTagDialog(context);
-                if (tag != null && tag.isNotEmpty) {
-                  setStateFn(() => customTags.add(tag));
-                }
-              },
-            ),
-          ],
-        ),
-      ],
     );
   }
 
@@ -545,7 +390,40 @@ class _LogPageState extends ConsumerState<LogPage> {
                   backgroundColor: Colors.red,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                onPressed: () => showFinishDialog(running),
+                onPressed: () async {
+                  if (running.templateName != null) {
+                    // Template-based: show confirmation first
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dlg) => AlertDialog(
+                        title: const Text('Selesaikan Aktivitas?'),
+                        content: Text(
+                          '${running.name} akan disimpan dengan durasi saat ini.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dlg, false),
+                            child: const Text('Batal'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(dlg, true),
+                            child: const Text('Ya, Selesai'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) {
+                      ref.read(activityListProvider.notifier).stopActivity();
+                      NotificationService.finishTrackingNotification(
+                        running.name,
+                        '',
+                      );
+                    }
+                  } else {
+                    NotificationService.cancelTrackingNotification();
+                    showFinishDialog(running);
+                  }
+                },
                 icon: const Icon(Icons.stop_rounded),
                 label: const Text('Selesai & Simpan',
                     style: TextStyle(fontSize: 16)),
@@ -605,7 +483,6 @@ class _LogPageState extends ConsumerState<LogPage> {
                       );
                   trackingController.clear();
                   setState(() {
-                    selectedTags.clear();
                     selectedCategory = ActivityCategory.lainnya;
                   });
                 },
@@ -617,9 +494,145 @@ class _LogPageState extends ConsumerState<LogPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 20),
+            // ── Template quick-start section ──
+            _buildTemplateSection(context, ref, theme),
           ],
         ],
       ),
+    );
+  }
+
+  void _confirmAndStartTemplate(
+      BuildContext context, WidgetRef ref, ActivityTemplateModel t) {
+    final tv = TimeValue.fromString(t.timeValue);
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                color: tv.color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: tv.color.withValues(alpha: 0.25)),
+              ),
+              alignment: Alignment.center,
+              child: Text(t.emoji, style: const TextStyle(fontSize: 32)),
+            ),
+            const SizedBox(height: 16),
+            Text('Mulai tracking?',
+                style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 4),
+            Text(t.name,
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('${t.category} · ${tv.shortLabel}',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('Batal'),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      ref.read(activityListProvider.notifier)
+                          .startFromTemplate(t);
+                      NotificationService.showTrackingNotification(
+                          t.name, t.emoji);
+                    },
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('Mulai'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Template quick-start section ─────────────────────────────────
+  Widget _buildTemplateSection(
+      BuildContext context, WidgetRef ref, ThemeData theme) {
+    final templates = ref.watch(templateListProvider);
+    if (templates.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.bolt_rounded, size: 16,
+                  color: theme.colorScheme.secondary),
+            ),
+            const SizedBox(width: 10),
+            Text('Mulai Cepat',
+                style: TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w600)),
+            const Spacer(),
+            Text(
+              '${templates.length} template',
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 44,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: templates.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 8),
+            itemBuilder: (ctx, i) {
+              final t = templates[i];
+              final tv = TimeValue.fromString(t.timeValue);
+              return ActionChip(
+                avatar: Text(t.emoji, style: const TextStyle(fontSize: 16)),
+                label: Text(t.name, style: const TextStyle(fontSize: 13)),
+                backgroundColor: tv.color.withValues(alpha: 0.08),
+                side: BorderSide(
+                  color: tv.color.withValues(alpha: 0.25),
+                ),
+                onPressed: () {
+                  _confirmAndStartTemplate(context, ref, t);
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -733,23 +746,6 @@ class _LogPageState extends ConsumerState<LogPage> {
             },
           ),
 
-          const SizedBox(height: 20),
-
-          // ── Section: Tag (Sub Kategori) ──
-          _formSectionHeader(
-            icon: Icons.local_offer_rounded,
-            label: 'Tag (Sub Kategori)',
-            color: theme.colorScheme.secondary,
-          ),
-          const SizedBox(height: 10),
-          _buildTagsSection(
-            category: selectedCategory,
-            selectedTags: selectedTags,
-            customTags: manualCustomTags,
-            setStateFn: (fn) => setState(fn),
-            context: context,
-          ),
-
           const SizedBox(height: 24),
 
           // ── Save button ──
@@ -771,20 +767,12 @@ class _LogPageState extends ConsumerState<LogPage> {
                   );
                   return;
                 }
-                if (selectedTags.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Pilih minimal 1 tag.')),
-                  );
-                  return;
-                }
                 await ref.read(activityListProvider.notifier)
                     .addActivity(ActivityModel(
                   name: manualActivityController.text.trim(),
                   startAt: startAt,
                   endAt: endAt,
                   timeValue: selectedTimeValue.name,
-                  tags: selectedTags.toList(),
                   createdAt: DateTime.now(),
                   category: selectedCategory.label,
                   notes: manualNotesController.text.trim(),
@@ -794,7 +782,6 @@ class _LogPageState extends ConsumerState<LogPage> {
                 setState(() {
                   startAt = null;
                   endAt = null;
-                  selectedTags.clear();
                   selectedCategory = ActivityCategory.lainnya;
                   selectedTimeValue = TimeValue.kebutuhan;
                 });

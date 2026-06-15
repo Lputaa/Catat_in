@@ -98,6 +98,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             firstDay: DateTime(2020),
             lastDay: DateTime(2035),
             focusedDay: focusedDay,
+            rowHeight: 70,
+            daysOfWeekHeight: 32, // Fix overflow for Days of Week text
             calendarFormat: CalendarFormat.month,
             startingDayOfWeek: StartingDayOfWeek.monday,
             headerStyle: HeaderStyle(
@@ -107,6 +109,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: theme.colorScheme.onSurface,
+                height: 1.2,
               ),
               leftChevronIcon: Icon(Icons.chevron_left,
                   color: theme.colorScheme.onSurfaceVariant),
@@ -118,11 +121,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 color: theme.colorScheme.onSurfaceVariant,
+                height: 1.2,
               ),
               weekendStyle: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 color: theme.colorScheme.onSurfaceVariant,
+                height: 1.2,
               ),
             ),
             calendarStyle: CalendarStyle(
@@ -133,15 +138,20 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
               todayTextStyle: TextStyle(
                 color: theme.colorScheme.primary,
                 fontWeight: FontWeight.w700,
+                height: 1.0,
               ),
               selectedDecoration: BoxDecoration(
                 color: theme.colorScheme.primary,
                 shape: BoxShape.circle,
               ),
+              selectedTextStyle: TextStyle(
+                color: theme.colorScheme.onPrimary,
+                height: 1.0,
+              ),
               weekendTextStyle:
-                  TextStyle(color: theme.colorScheme.onSurface),
+                  TextStyle(color: theme.colorScheme.onSurface, height: 1.0),
               defaultTextStyle:
-                  TextStyle(color: theme.colorScheme.onSurface),
+                  TextStyle(color: theme.colorScheme.onSurface, height: 1.0),
               outsideDaysVisible: false,
               cellMargin: const EdgeInsets.all(4),
             ),
@@ -166,7 +176,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                   final score = _getDayScore(day, activities);
                   final color = _scoreColor(score);
                   return Positioned(
-                    bottom: 1,
+                    bottom: 4,
                     child: Container(
                       width: 6,
                       height: 6,
@@ -347,29 +357,20 @@ class _EventCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.zero,
+        border: Border(
+          top: BorderSide(color: color.withValues(alpha: 0.15), width: 2),
+          right: BorderSide(color: color.withValues(alpha: 0.15), width: 2),
+          bottom: BorderSide(color: color.withValues(alpha: 0.15), width: 2),
+          left: BorderSide(color: color, width: 4), // The thick color accent bar
         ),
       ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Color accent bar
-            Container(
-              width: 4,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  bottomLeft: Radius.circular(12),
-                ),
-              ),
-            ),
-            // Time column
-            SizedBox(
-              width: 60,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Time column
+          SizedBox(
+            width: 60,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 12, 4, 12),
                 child: Column(
@@ -464,30 +465,12 @@ class _EventCard extends StatelessWidget {
                         ],
                       ),
                     ],
-                    if (activity.tags.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 4,
-                        runSpacing: 2,
-                        children: activity.tags
-                            .take(3)
-                            .map((t) => Text(
-                                  '#$t',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: color.withValues(alpha: 0.8),
-                                  ),
-                                ))
-                            .toList(),
-                      ),
-                    ],
                   ],
                 ),
               ),
             ),
           ],
         ),
-      ),
     );
   }
 }

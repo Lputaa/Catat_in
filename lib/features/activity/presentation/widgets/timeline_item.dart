@@ -31,352 +31,12 @@ class _TimelineItemState extends ConsumerState<TimelineItem> {
     return '${m}m';
   }
 
-  // ── Save with validation & loading guard ────────────────────────────────────
-  Future<void> _saveEdit({
-    required ActivityModel activity,
-    required String name,
-    required TimeValue timeValue,
-    required List<String> tags,
-    required String category,
-    required DateTime? startAt,
-    required DateTime? endAt,
-    required String notes,
-    required VoidCallback onSaved,
-    required ValueSetter<bool> setLoading,
-  }) async {
-    // Validate time range
-    if (startAt != null && endAt != null && !endAt.isAfter(startAt)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Waktu selesai harus setelah waktu mulai.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      await ref
-          .read(activityListProvider.notifier)
-          .updateActivity(
-            activity,
-            name: name.trim().isEmpty ? activity.name : name.trim(),
-            timeValue: timeValue.name,
-            tags: tags,
-            category: category,
-            startAt: startAt,
-            endAt: endAt,
-            isRunning: activity.isRunning,
-            notes: notes.trim(),
-          );
-      HapticFeedback.mediumImpact();
-      onSaved();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ── Edit sheet (local state — no stale data) ────────────────────────────────
   void _showEditSheet() {
-    final activity = widget.activity;
-
-    // All edit state is local to this sheet invocation.
-    // Fresh from activity data every time the sheet opens.
-    final nameController = TextEditingController(text: activity.name);
-    final notesController = TextEditingController(text: activity.notes ?? '');
-    var category = ActivityCategory.values.firstWhere(
-      (item) => item.label == activity.category,
-      orElse: () => ActivityCategory.lainnya,
-    );
-    var timeValue = TimeValue.fromString(activity.timeValue);
-    final selectedTags = Set<String>.from(activity.tags);
-    final customTags = <String>[];
-    // Preserve custom tags (tags not in the current category's subTags)
-    for (final tag in activity.tags) {
-      if (!category.subTags.contains(tag) && !customTags.contains(tag)) {
-        customTags.add(tag);
-      }
-    }
-    DateTime? startAt = activity.startAt;
-    DateTime? endAt = activity.endAt;
-    bool isSaving = false;
-
-    Future<void> pickTime(bool isStart, StateSetter setSheetState) async {
-      final picked = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.fromDateTime(
-          (isStart ? startAt : endAt) ?? DateTime.now(),
-        ),
-      );
-      if (picked == null) return;
-
-      final base = (isStart ? startAt : endAt) ?? DateTime.now();
-      final updated = DateTime(
-        base.year,
-        base.month,
-        base.day,
-        picked.hour,
-        picked.minute,
-      );
-
-      setSheetState(() {
-        if (isStart) {
-          startAt = updated;
-        } else {
-          endAt = updated;
-        }
-      });
-    }
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 24,
-                // Fix keyboard overlap
-                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Edit Aktivitas',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nama aktivitas',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: notesController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Catatan',
-                        hintText: 'Tambahkan catatan...',
-                        prefixIcon: Icon(Icons.notes_rounded),
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Nilai Waktu',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: TimeValue.values.map((tv) {
-                        final sel = timeValue == tv;
-                        return ChoiceChip(
-                          label: Text('${tv.emoji} ${tv.shortLabel}',
-                              style: const TextStyle(fontSize: 12)),
-                          selected: sel,
-                          selectedColor: tv.color.withValues(alpha: 0.25),
-                          onSelected: (v) {
-                            if (v) {
-                              setSheetState(() => timeValue = tv);
-                            }
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 12),
-                    // ── Kategori (before tags) ──
-                    DropdownButtonFormField<ActivityCategory>(
-                      initialValue: category,
-                      decoration: const InputDecoration(labelText: 'Kategori'),
-                      items: ActivityCategory.values
-                          .map(
-                            (cat) => DropdownMenuItem(
-                              value: cat,
-                              child: Text('${cat.emoji}  ${cat.label}'),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setSheetState(() => category = value);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    // ── Tag (Sub Kategori) ──
-                    Text(
-                      'Tag (Sub Kategori)',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ...category.subTags.map((tag) {
-                          final selected = selectedTags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag),
-                            selected: selected,
-                            onSelected: (value) {
-                              setSheetState(() {
-                                if (value) { selectedTags.add(tag); }
-                                else { selectedTags.remove(tag); }
-                              });
-                            },
-                          );
-                        }),
-                        ...customTags.map((tag) {
-                          final selected = selectedTags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag),
-                            selected: selected,
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () {
-                              setSheetState(() {
-                                customTags.remove(tag);
-                                selectedTags.remove(tag);
-                              });
-                            },
-                            onSelected: (value) {
-                              setSheetState(() {
-                                if (value) { selectedTags.add(tag); }
-                                else { selectedTags.remove(tag); }
-                              });
-                            },
-                          );
-                        }),
-                        ActionChip(
-                          avatar: const Icon(Icons.add, size: 16),
-                          label: const Text('Tambah'),
-                          onPressed: () async {
-                            final controller = TextEditingController();
-                            final tag = await showDialog<String>(
-                              context: sheetContext,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Tambah Tag Baru'),
-                                content: TextField(
-                                  controller: controller,
-                                  autofocus: true,
-                                  decoration: InputDecoration(
-                                    labelText: 'Nama tag',
-                                    prefixIcon: const Icon(Icons.local_offer_rounded),
-                                    border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                  onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.of(ctx).pop(),
-                                    child: const Text('Batal'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-                                    child: const Text('Tambah'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (tag != null && tag.isNotEmpty) {
-                              setSheetState(() => customTags.add(tag));
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => pickTime(true, setSheetState),
-                            icon: const Icon(Icons.play_circle_outline_rounded),
-                            label: Text(
-                              startAt == null
-                                  ? 'Waktu Mulai'
-                                  : '${startAt!.hour.toString().padLeft(2, '0')}:${startAt!.minute.toString().padLeft(2, '0')}',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => pickTime(false, setSheetState),
-                            icon: const Icon(Icons.stop_circle_outlined),
-                            label: Text(
-                              endAt == null
-                                  ? 'Waktu Selesai'
-                                  : '${endAt!.hour.toString().padLeft(2, '0')}:${endAt!.minute.toString().padLeft(2, '0')}',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: isSaving
-                            ? null
-                            : () => _saveEdit(
-                                  activity: activity,
-                                  name: nameController.text,
-                                  timeValue: timeValue,
-                                  tags: selectedTags.toList(),
-                                  category: category.label,
-                                  startAt: startAt,
-                                  endAt: endAt,
-                                  notes: notesController.text,
-                                  onSaved: () {
-                                    if (mounted) Navigator.of(context).pop();
-                                  },
-                                  setLoading: (v) =>
-                                      setSheetState(() => isSaving = v),
-                                ),
-                        child: isSaving
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Simpan Perubahan'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    ).then((_) {
-      // Dispose controllers when sheet is closed
-      nameController.dispose();
-      notesController.dispose();
-    });
+      builder: (sheetContext) => _EditSheet(activity: widget.activity),
+    );
   }
 
   // ── Delete with confirmation + undo SnackBar ────────────────────────────────
@@ -412,17 +72,43 @@ class _TimelineItemState extends ConsumerState<TimelineItem> {
       HapticFeedback.mediumImpact();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(
           SnackBar(
-            content: Text('"$activityName" dihapus.'),
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'Undo',
-              onPressed: () async {
-                await notifier.undoDelete();
-              },
+            duration: const Duration(seconds: 6),
+            content: Row(
+              children: [
+                const Icon(Icons.delete_outline_rounded,
+                    color: Colors.white70, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '"$activityName" dihapus.',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    messenger.hideCurrentSnackBar();
+                    await notifier.undoDelete();
+                  },
+                  child: const Text('Undo',
+                      style: TextStyle(
+                          color: Colors.amber,
+                          fontWeight: FontWeight.w700)),
+                ),
+                const SizedBox(width: 4),
+                InkWell(
+                  onTap: () => messenger.hideCurrentSnackBar(),
+                  borderRadius: BorderRadius.circular(20),
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.close_rounded,
+                        color: Colors.white54, size: 18),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -703,41 +389,6 @@ class _TimelineItemState extends ConsumerState<TimelineItem> {
                       ),
                     ),
                   ],
-
-                  if (activity.tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 5,
-                      runSpacing: 5,
-                      children: activity.tags
-                          .map(
-                            (tag) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .secondaryContainer
-                                    .withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                '#$tag',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSecondaryContainer,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -777,6 +428,239 @@ class _TimelineItemState extends ConsumerState<TimelineItem> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Edit Sheet Content ──────────────────────────────────────────────────────
+class _EditSheet extends ConsumerStatefulWidget {
+  final ActivityModel activity;
+
+  const _EditSheet({required this.activity});
+
+  @override
+  ConsumerState<_EditSheet> createState() => _EditSheetState();
+}
+
+class _EditSheetState extends ConsumerState<_EditSheet> {
+  late TextEditingController nameController;
+  late TextEditingController notesController;
+  late ActivityCategory category;
+  late TimeValue timeValue;
+  DateTime? startAt;
+  DateTime? endAt;
+  bool isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final activity = widget.activity;
+    nameController = TextEditingController(text: activity.name);
+    notesController = TextEditingController(text: activity.notes ?? '');
+    category = ActivityCategory.values.firstWhere(
+      (item) => item.label == activity.category,
+      orElse: () => ActivityCategory.lainnya,
+    );
+    timeValue = TimeValue.fromString(activity.timeValue);
+    startAt = activity.startAt;
+    endAt = activity.endAt;
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> pickTime(bool isStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        (isStart ? startAt : endAt) ?? DateTime.now(),
+      ),
+    );
+    if (picked == null) return;
+
+    final base = (isStart ? startAt : endAt) ?? DateTime.now();
+    final updated = DateTime(
+      base.year, base.month, base.day, picked.hour, picked.minute,
+    );
+
+    setState(() {
+      if (isStart) {
+        startAt = updated;
+      } else {
+        endAt = updated;
+      }
+    });
+  }
+
+  Future<void> _saveEdit() async {
+    if (startAt != null && endAt != null && !endAt!.isAfter(startAt!)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Waktu selesai harus setelah waktu mulai.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => isSaving = true);
+
+    try {
+      await ref.read(activityListProvider.notifier).updateActivity(
+            widget.activity,
+            name: nameController.text.trim().isEmpty
+                ? widget.activity.name
+                : nameController.text.trim(),
+            timeValue: timeValue.name,
+            category: category.label,
+            startAt: startAt,
+            endAt: endAt,
+            isRunning: widget.activity.isRunning,
+            notes: notesController.text.trim(),
+          );
+      HapticFeedback.mediumImpact();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Edit Aktivitas',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Nama aktivitas',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Catatan',
+                hintText: 'Tambahkan catatan...',
+                prefixIcon: Icon(Icons.notes_rounded),
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Nilai Waktu',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: TimeValue.values.map((tv) {
+                final sel = timeValue == tv;
+                return ChoiceChip(
+                  label: Text('${tv.emoji} ${tv.shortLabel}',
+                      style: const TextStyle(fontSize: 12)),
+                  selected: sel,
+                  selectedColor: tv.color.withValues(alpha: 0.25),
+                  onSelected: (v) {
+                    if (v) setState(() => timeValue = tv);
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<ActivityCategory>(
+              initialValue: category,
+              decoration: const InputDecoration(labelText: 'Kategori'),
+              items: ActivityCategory.values
+                  .map(
+                    (cat) => DropdownMenuItem(
+                      value: cat,
+                      child: Text('${cat.emoji}  ${cat.label}'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => category = value);
+              },
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => pickTime(true),
+                    icon: const Icon(Icons.play_circle_outline_rounded),
+                    label: Text(
+                      startAt == null
+                          ? 'Waktu Mulai'
+                          : '${startAt!.hour.toString().padLeft(2, '0')}:${startAt!.minute.toString().padLeft(2, '0')}',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => pickTime(false),
+                    icon: const Icon(Icons.stop_circle_outlined),
+                    label: Text(
+                      endAt == null
+                          ? 'Waktu Selesai'
+                          : '${endAt!.hour.toString().padLeft(2, '0')}:${endAt!.minute.toString().padLeft(2, '0')}',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: isSaving ? null : _saveEdit,
+                child: isSaving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Simpan Perubahan'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

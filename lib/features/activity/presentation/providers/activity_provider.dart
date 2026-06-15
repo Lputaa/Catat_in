@@ -1,4 +1,5 @@
 import 'package:catat_in/features/activity/data/models/activity_model.dart';
+import 'package:catat_in/features/activity/data/models/activity_template_model.dart';
 import 'package:catat_in/features/activity/domain/time_value.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,7 +31,8 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
   Future<void> startActivity({
     String? name,
     String category = 'Lainnya',
-    List<String> tags = const [],
+    String? templateName,
+    String? timeValue,
   }) async {
     final running = getRunningActivity();
 
@@ -46,13 +48,13 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
 
     final activity = ActivityModel(
       name: activityName,
-      tags: tags,
       category: category,
       createdAt: DateTime.now(),
       startAt: DateTime.now(),
       endAt: null,
       isRunning: true,
-      timeValue: TimeValue.kebutuhan.name,
+      timeValue: timeValue ?? TimeValue.kebutuhan.name,
+      templateName: templateName,
     );
 
     await box.add(activity);
@@ -60,10 +62,19 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
     loadActivities();
   }
 
+  /// Start tracking from a template — all fields pre-filled, auto-save on stop.
+  Future<void> startFromTemplate(ActivityTemplateModel template) async {
+    await startActivity(
+      name: template.name,
+      category: template.category,
+      templateName: template.name,
+      timeValue: template.timeValue,
+    );
+  }
+
   Future<void> finishRunningActivity({
     TimeValue timeValue = TimeValue.kebutuhan,
     String? category,
-    List<String>? tags,
     String? name,
     String notes = '',
   }) async {
@@ -75,7 +86,6 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
 
     final finished = ActivityModel(
       name: (name != null && name.trim().isNotEmpty) ? name.trim() : running.name,
-      tags: tags ?? running.tags,
       createdAt: running.createdAt,
       category: category ?? running.category,
       startAt: running.startAt,
@@ -83,6 +93,7 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
       isRunning: false,
       notes: notes,
       timeValue: timeValue.name,
+      templateName: running.templateName,
     );
 
     await box.put(running.key, finished);
@@ -109,7 +120,6 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
 
     final finished = ActivityModel(
       name: running.name,
-      tags: running.tags,
       createdAt: running.createdAt,
       category: running.category,
       startAt: running.startAt,
@@ -117,6 +127,7 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
       isRunning: false,
       notes: running.notes,
       timeValue: running.timeValue,
+      templateName: running.templateName,
     );
 
     await box.put(running.key, finished);
@@ -156,7 +167,6 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
   Future<void> updateActivity(
     ActivityModel activity, {
     String? name,
-    List<String>? tags,
     String? category,
     DateTime? startAt,
     DateTime? endAt,
@@ -166,7 +176,6 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
   }) async {
     final updated = ActivityModel(
       name: name ?? activity.name,
-      tags: tags ?? activity.tags,
       createdAt: activity.createdAt,
       category: category ?? activity.category,
       startAt: startAt ?? activity.startAt,
@@ -174,6 +183,7 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
       isRunning: isRunning ?? activity.isRunning,
       notes: notes ?? activity.notes,
       timeValue: timeValue ?? activity.timeValue,
+      templateName: activity.templateName,
     );
 
     await box.put(activity.key, updated);
@@ -187,12 +197,10 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
     required DateTime endAt,
     required String category,
     TimeValue timeValue = TimeValue.kebutuhan,
-    List<String> tags = const [],
     String notes = '',
   }) async {
     final activity = ActivityModel(
       name: name,
-      tags: tags,
       createdAt: startAt,
       category: category,
       startAt: startAt,
@@ -210,7 +218,6 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
     // Store a copy for undo before deleting
     _lastDeletedActivity = ActivityModel(
       name: activity.name,
-      tags: List<String>.from(activity.tags),
       createdAt: activity.createdAt,
       category: activity.category,
       startAt: activity.startAt,
@@ -218,6 +225,7 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
       isRunning: activity.isRunning,
       notes: activity.notes,
       timeValue: activity.timeValue,
+      templateName: activity.templateName,
     );
 
     await activity.delete();

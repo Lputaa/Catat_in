@@ -1,6 +1,9 @@
+import 'package:catat_in/core/services/notification_service.dart';
+import 'package:catat_in/features/activity/data/models/activity_template_model.dart';
 import 'package:catat_in/features/activity/domain/activity_category.dart';
 import 'package:catat_in/features/activity/domain/time_value.dart';
 import 'package:catat_in/features/activity/presentation/providers/activity_provider.dart';
+import 'package:catat_in/features/activity/presentation/providers/template_provider.dart';
 import 'package:catat_in/features/activity/presentation/widgets/catat_in_app_bar.dart';
 import 'package:catat_in/features/activity/presentation/widgets/timeline_item.dart';
 import 'package:flutter/material.dart';
@@ -164,7 +167,38 @@ class TodayPage extends ConsumerWidget {
               _RunningBanner(
                 activity: runningActivity,
                 onStop: () async {
-                  await _showFinishSheet(context, runningActivity, notifier);
+                  if (runningActivity.templateName != null) {
+                    // Template-based: show confirmation first
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dlg) => AlertDialog(
+                        title: const Text('Selesaikan Aktivitas?'),
+                        content: Text(
+                          '${runningActivity.name} akan disimpan dengan durasi saat ini.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dlg, false),
+                            child: const Text('Batal'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(dlg, true),
+                            child: const Text('Ya, Selesai'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) {
+                      await notifier.stopActivity();
+                      await NotificationService.finishTrackingNotification(
+                        runningActivity.name,
+                        '',
+                      );
+                    }
+                  } else {
+                    await NotificationService.cancelTrackingNotification();
+                    await _showFinishSheet(context, runningActivity, notifier);
+                  }
                 },
               ),
               const SizedBox(height: 14),
@@ -216,6 +250,9 @@ class TodayPage extends ConsumerWidget {
             ),
 
             const SizedBox(height: 20),
+
+            // ── Template shortcuts (only when idle) ──────────────
+            if (runningActivity == null) ..._buildTemplateShortcuts(context, ref),
 
             // ── Timeline header ─────────────────────────────────────
             Row(
@@ -315,6 +352,128 @@ class TodayPage extends ConsumerWidget {
     );
   }
 
+  void _confirmAndStartTemplate(
+    BuildContext context,
+    ActivityNotifier notifier,
+    ActivityTemplateModel t,
+  ) {
+    final tv = TimeValue.fromString(t.timeValue);
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                color: tv.color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: tv.color.withValues(alpha: 0.25)),
+              ),
+              alignment: Alignment.center,
+              child: Text(t.emoji, style: const TextStyle(fontSize: 32)),
+            ),
+            const SizedBox(height: 16),
+            Text('Mulai tracking?',
+                style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 4),
+            Text(t.name,
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('${t.category} · ${tv.shortLabel}',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('Batal'),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      notifier.startFromTemplate(t);
+                      NotificationService.showTrackingNotification(
+                          t.name, t.emoji);
+                    },
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('Mulai'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildTemplateShortcuts(BuildContext context, WidgetRef ref) {
+    final templates = ref.watch(templateListProvider);
+    if (templates.isEmpty) return [];
+    final theme = Theme.of(context);
+    final notifier = ref.read(activityListProvider.notifier);
+
+    return [
+      Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.bolt_rounded, size: 16,
+                color: theme.colorScheme.secondary),
+          ),
+          const SizedBox(width: 10),
+          const Text('Mulai Cepat',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        ],
+      ),
+      const SizedBox(height: 10),
+      SizedBox(
+        height: 44,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: templates.length,
+          separatorBuilder: (context, index) => const SizedBox(width: 8),
+          itemBuilder: (ctx, i) {
+            final t = templates[i];
+            final tv = TimeValue.fromString(t.timeValue);
+            return ActionChip(
+              avatar: Text(t.emoji, style: const TextStyle(fontSize: 16)),
+              label: Text(t.name, style: const TextStyle(fontSize: 13)),
+              backgroundColor: tv.color.withValues(alpha: 0.08),
+              side: BorderSide(color: tv.color.withValues(alpha: 0.25)),
+              onPressed: () {
+                _confirmAndStartTemplate(context, notifier, t);
+              },
+            );
+          },
+        ),
+      ),
+      const SizedBox(height: 20),
+    ];
+  }
+
   Widget _divider(BuildContext context) {
     return Container(
       width: 1,
@@ -333,8 +492,6 @@ class TodayPage extends ConsumerWidget {
     final finishNameController =
         TextEditingController(text: runningActivity.name);
     final finishNotesController = TextEditingController();
-    final finishTags = <String>{};
-    final finishCustomTags = <String>[];
     var finishCategory = ActivityCategory.lainnya;
     var finishTimeValue = TimeValue.fromString(runningActivity.timeValue);
 
@@ -397,7 +554,7 @@ class TodayPage extends ConsumerWidget {
                       }).toList(),
                     ),
                     const SizedBox(height: 8),
-                    const Text('Pilih kategori dan tag sebelum menyimpan.'),
+                    const Text('Pilih kategori sebelum menyimpan.'),
                     const SizedBox(height: 12),
                     // ── Kategori ──
                     DropdownButtonFormField<ActivityCategory>(
@@ -419,112 +576,23 @@ class TodayPage extends ConsumerWidget {
                       },
                     ),
                     const SizedBox(height: 16),
-                    // ── Tag (Sub Kategori) ──
-                    Text(
-                      'Tag (Sub Kategori)',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ...finishCategory.subTags.map((tag) {
-                          final selected = finishTags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag),
-                            selected: selected,
-                            onSelected: (value) {
-                              setSheetState(() {
-                                if (value) { finishTags.add(tag); }
-                                else { finishTags.remove(tag); }
-                              });
-                            },
-                          );
-                        }),
-                        ...finishCustomTags.map((tag) {
-                          final selected = finishTags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag),
-                            selected: selected,
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () {
-                              setSheetState(() {
-                                finishCustomTags.remove(tag);
-                                finishTags.remove(tag);
-                              });
-                            },
-                            onSelected: (value) {
-                              setSheetState(() {
-                                if (value) { finishTags.add(tag); }
-                                else { finishTags.remove(tag); }
-                              });
-                            },
-                          );
-                        }),
-                        ActionChip(
-                          avatar: const Icon(Icons.add, size: 16),
-                          label: const Text('Tambah'),
-                          onPressed: () async {
-                            final controller = TextEditingController();
-                            final tag = await showDialog<String>(
-                              context: sheetContext,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Tambah Tag Baru'),
-                                content: TextField(
-                                  controller: controller,
-                                  autofocus: true,
-                                  decoration: InputDecoration(
-                                    labelText: 'Nama tag',
-                                    prefixIcon: const Icon(Icons.local_offer_rounded),
-                                    border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                  onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.of(ctx).pop(),
-                                    child: const Text('Batal'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-                                    child: const Text('Tambah'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (tag != null && tag.isNotEmpty) {
-                              setSheetState(() => finishCustomTags.add(tag));
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: () async {
-                          if (finishTags.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Pilih minimal 1 tag sebelum menyimpan.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
                           await notifier.finishRunningActivity(
                             timeValue: finishTimeValue,
                             category: finishCategory.label,
-                            tags: finishTags.toList(),
                             name: finishNameController.text.trim(),
                             notes: finishNotesController.text.trim(),
                           );
-                          if (context.mounted) {
+                          await NotificationService.finishTrackingNotification(
+                            finishNameController.text.trim().isNotEmpty
+                                ? finishNameController.text.trim()
+                                : runningActivity.name,
+                            '',
+                          );
+                          if (sheetContext.mounted) {
                             Navigator.of(sheetContext).pop();
                           }
                         },
@@ -551,6 +619,7 @@ class _RunningBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTemplate = activity.templateName != null;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -559,46 +628,69 @@ class _RunningBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.green.withValues(alpha: 0.30)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: Colors.green,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.green.withValues(alpha: 0.5),
-                  blurRadius: 6,
-                  spreadRadius: 1,
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.green.withValues(alpha: 0.5),
+                      blurRadius: 6,
+                      spreadRadius: 1,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Sedang Berjalan',
+                      style: TextStyle(fontSize: 12, color: Colors.green),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      activity.name,
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: onStop,
+                icon: const Icon(Icons.stop_rounded, size: 18),
+                label: Text(isTemplate ? 'Selesai' : 'Detail'),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          if (isTemplate) ...[
+            const SizedBox(height: 10),
+            Row(
               children: [
-                const Text(
-                  'Sedang Berjalan',
-                  style: TextStyle(fontSize: 12, color: Colors.green),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  activity.name,
-                  style: const TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w700),
+                Icon(Icons.bolt_rounded, size: 14, color: Colors.green.shade700),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Template · Ketuk "Selesai" untuk langsung simpan',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.green.shade700.withValues(alpha: 0.8),
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-          FilledButton.tonalIcon(
-            onPressed: onStop,
-            icon: const Icon(Icons.stop_rounded, size: 18),
-            label: const Text('Selesai'),
-          ),
+          ],
         ],
       ),
     );
@@ -745,8 +837,6 @@ class _GapIndicatorState extends State<_GapIndicator> {
     var endTime = TimeOfDay.fromDateTime(widget.end);
     var category = ActivityCategory.lainnya;
     var timeValue = TimeValue.kebutuhan;
-    final tags = <String>{};
-    final gapCustomTags = <String>[];
 
     await showModalBottomSheet(
       context: context,
@@ -897,88 +987,6 @@ class _GapIndicatorState extends State<_GapIndicator> {
                         if (v != null) setSheet(() => category = v);
                       },
                     ),
-                    const SizedBox(height: 16),
-                    // ── Tag (Sub Kategori) ──
-                    Text('Tag (Sub Kategori)',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ...category.subTags.map((tag) {
-                          final sel = tags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag),
-                            selected: sel,
-                            onSelected: (v) {
-                              setSheet(() {
-                                if (v) { tags.add(tag); }
-                                else { tags.remove(tag); }
-                              });
-                            },
-                          );
-                        }),
-                        ...gapCustomTags.map((tag) {
-                          final sel = tags.contains(tag);
-                          return FilterChip(
-                            label: Text(tag),
-                            selected: sel,
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () {
-                              setSheet(() {
-                                gapCustomTags.remove(tag);
-                                tags.remove(tag);
-                              });
-                            },
-                            onSelected: (v) {
-                              setSheet(() {
-                                if (v) { tags.add(tag); }
-                                else { tags.remove(tag); }
-                              });
-                            },
-                          );
-                        }),
-                        ActionChip(
-                          avatar: const Icon(Icons.add, size: 16),
-                          label: const Text('Tambah'),
-                          onPressed: () async {
-                            final controller = TextEditingController();
-                            final tag = await showDialog<String>(
-                              context: sheetCtx,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Tambah Tag Baru'),
-                                content: TextField(
-                                  controller: controller,
-                                  autofocus: true,
-                                  decoration: InputDecoration(
-                                    labelText: 'Nama tag',
-                                    prefixIcon: const Icon(Icons.local_offer_rounded),
-                                    border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                  onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.of(ctx).pop(),
-                                    child: const Text('Batal'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-                                    child: const Text('Tambah'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (tag != null && tag.isNotEmpty) {
-                              setSheet(() => gapCustomTags.add(tag));
-                            }
-                          },
-                        ),
-                      ],
-                    ),
                     const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
@@ -986,19 +994,10 @@ class _GapIndicatorState extends State<_GapIndicator> {
                         onPressed: () async {
                           final name = nameController.text.trim();
                           if (name.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            ScaffoldMessenger.of(sheetCtx).showSnackBar(
                               const SnackBar(
                                 content: Text(
                                     'Masukkan nama aktivitas.'),
-                              ),
-                            );
-                            return;
-                          }
-                          if (tags.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Pilih minimal 1 tag.'),
                               ),
                             );
                             return;
@@ -1018,7 +1017,6 @@ class _GapIndicatorState extends State<_GapIndicator> {
                             endAt: endDt,
                             category: category.label,
                             timeValue: timeValue,
-                            tags: tags.toList(),
                             notes: notesController.text.trim(),
                           );
                           if (sheetCtx.mounted) {

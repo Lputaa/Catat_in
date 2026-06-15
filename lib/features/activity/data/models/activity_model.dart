@@ -8,9 +8,6 @@ class ActivityModel extends HiveObject {
   @HiveField(0)
   final String name;
 
-  @HiveField(4)
-  final List<String> tags;
-
   @HiveField(5)
   final DateTime createdAt;
 
@@ -32,6 +29,9 @@ class ActivityModel extends HiveObject {
   @HiveField(11)
   final String? _timeValue;
 
+  @HiveField(12)
+  final String? templateName;
+
   /// Safe accessor — always returns a valid TimeValue.
   TimeValue get timeValueEnum =>
       TimeValue.fromString(_timeValue);
@@ -44,7 +44,6 @@ class ActivityModel extends HiveObject {
 
   ActivityModel({
     required this.name,
-    required this.tags,
     required this.createdAt,
     required this.category,
     this.startAt,
@@ -52,5 +51,6 @@ class ActivityModel extends HiveObject {
     this.isRunning = false,
     this.notes,
     String? timeValue,
+    this.templateName,
   }) : _timeValue = timeValue ?? 'kebutuhan';
 }

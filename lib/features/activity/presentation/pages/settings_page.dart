@@ -2,14 +2,18 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:catat_in/core/services/notification_service.dart';
+import 'package:catat_in/features/activity/presentation/pages/template_page.dart';
 import 'package:catat_in/features/activity/presentation/providers/activity_provider.dart';
 import 'package:catat_in/features/activity/presentation/widgets/catat_in_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:catat_in/features/activity/data/models/activity_model.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -77,13 +81,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _SettingsSection(
               title: 'Preferensi',
               children: [
+
                 _SettingsTile(
-                  icon: Icons.palette_outlined,
-                  title: 'Tema',
-                  subtitle: 'Mode terang / gelap',
+                  icon: Icons.bolt_rounded,
+                  title: 'Kelola Template',
+                  subtitle: 'Buat dan atur template aktivitas',
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Tema akan mengikuti pengaturan sistem.')),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TemplatePage()),
                     );
                   },
                 ),
@@ -149,28 +155,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 _SettingsTile(
                   icon: Icons.download_outlined,
                   title: 'Export Data',
-                  subtitle: 'Ekspor aktivitas ke file',
-                  onTap: () async {
-                    final file = await _writeExportFile(activities, 'export');
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Export selesai: ${file.path}')),
-                      );
-                    }
-                  },
+                  subtitle: 'Ekspor aktivitas ke file (ICS, CSV, JSON)',
+                  onTap: () => _showExportOptions(context, activities),
                 ),
+
                 _SettingsTile(
-                  icon: Icons.upload_outlined,
-                  title: 'Backup Data',
-                  subtitle: 'Cadangkan data aktivitas',
-                  onTap: () async {
-                    final file = await _writeExportFile(activities, 'backup');
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Backup selesai: ${file.path}')),
-                      );
-                    }
-                  },
+                  icon: Icons.file_download_outlined,
+                  title: 'Import / Restore Data',
+                  subtitle: 'Impor dari CSV, ICS, atau file Backup',
+                  onTap: () => _importData(context),
                 ),
               ],
             ),
@@ -261,6 +254,63 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
     );
   }
+
+  void _showExportOptions(BuildContext context, List<dynamic> activities) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Export Data',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text('${activities.length} aktivitas akan diekspor',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 16),
+            _ExportOptionTile(
+              icon: Icons.calendar_month_rounded,
+              color: Colors.blue,
+              title: 'ICS (Google Calendar)',
+              subtitle: 'Format kalender — bisa diimpor ke Google Calendar, Outlook, dll',
+              onTap: () async {
+                Navigator.pop(ctx);
+                final file = await _writeICSFile(activities);
+                if (context.mounted) {
+                  await Share.shareXFiles(
+                    [XFile(file.path)],
+                    text: 'Aktivitas Catat-In (${activities.length} kegiatan)',
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            _ExportOptionTile(
+              icon: Icons.table_chart_rounded,
+              color: Colors.green,
+              title: 'CSV (Spreadsheet)',
+              subtitle: 'Format tabel — bisa dibuka di Excel, Google Sheets, dll',
+              onTap: () async {
+                Navigator.pop(ctx);
+                final file = await _writeCSVFile(activities);
+                if (context.mounted) {
+                  await Share.shareXFiles(
+                    [XFile(file.path)],
+                    text: 'Aktivitas Catat-In (${activities.length} kegiatan)',
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<File> _writeExportFile(List<dynamic> activities, String kind) async {
     final directory = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
@@ -273,7 +323,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         'name': activity.name,
         'isProductive': activity.isProductive,
         'timeValue': activity.timeValue,
-        'tags': activity.tags,
         'createdAt': activity.createdAt.toIso8601String(),
         'category': activity.category,
         'startAt': activity.startAt?.toIso8601String(),
@@ -284,6 +333,263 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     await file.writeAsString(jsonEncode(payload));
     return file;
+  }
+
+  /// Generates a CSV file compatible with Excel, Google Sheets, etc.
+  Future<File> _writeCSVFile(List<dynamic> activities) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .replaceAll('.', '-');
+    final file = File('${directory.path}/catat_in_$timestamp.csv');
+
+    String escapeCSV(String text) {
+      if (text.contains(',') || text.contains('"') || text.contains('\n')) {
+        return '"${text.replaceAll('"', '""')}"';
+      }
+      return text;
+    }
+
+    final buffer = StringBuffer();
+    // Header
+    buffer.writeln(
+        'Nama,Kategori,Nilai Waktu,Mulai,Selesai,Durasi (menit),Catatan');
+
+    for (final activity in activities) {
+      final startAt = activity.startAt as DateTime?;
+      final endAt = activity.endAt as DateTime?;
+      final duration = (startAt != null && endAt != null)
+          ? endAt.difference(startAt).inMinutes
+          : '';
+      final notes = (activity.notes ?? '') as String;
+
+      buffer.writeln([
+        escapeCSV(activity.name),
+        escapeCSV(activity.category),
+        escapeCSV(activity.timeValue),
+        startAt?.toIso8601String() ?? '',
+        endAt?.toIso8601String() ?? '',
+        duration.toString(),
+        escapeCSV(notes),
+      ].join(','));
+    }
+
+    await file.writeAsString(buffer.toString());
+    return file;
+  }
+
+  /// Generates an ICS (iCalendar) file compatible with Google Calendar,
+  /// Apple Calendar, Outlook, and other calendar apps.
+  Future<File> _writeICSFile(List<dynamic> activities) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .replaceAll('.', '-');
+    final file = File('${directory.path}/catat_in_$timestamp.ics');
+
+    String formatDt(DateTime dt) {
+      // ICS format: YYYYMMDDTHHmmssZ (UTC)
+      final utc = dt.toUtc();
+      return '${utc.year.toString().padLeft(4, '0')}'
+          '${utc.month.toString().padLeft(2, '0')}'
+          '${utc.day.toString().padLeft(2, '0')}T'
+          '${utc.hour.toString().padLeft(2, '0')}'
+          '${utc.minute.toString().padLeft(2, '0')}'
+          '${utc.second.toString().padLeft(2, '0')}Z';
+    }
+
+    String escapeICS(String text) {
+      return text
+          .replaceAll('\\', '\\\\')
+          .replaceAll(';', '\\;')
+          .replaceAll(',', '\\,')
+          .replaceAll('\n', '\\n');
+    }
+
+    final buffer = StringBuffer();
+    buffer.writeln('BEGIN:VCALENDAR');
+    buffer.writeln('VERSION:2.0');
+    buffer.writeln('PRODID:-//CatatIn//Activity Tracker//ID');
+    buffer.writeln('CALSCALE:GREGORIAN');
+    buffer.writeln('METHOD:PUBLISH');
+    buffer.writeln('X-WR-CALNAME:Catat-In Activities');
+    buffer.writeln('X-WR-TIMEZONE:Asia/Jakarta');
+
+    for (final activity in activities) {
+      final startAt = activity.startAt as DateTime?;
+      final endAt = activity.endAt as DateTime?;
+      if (startAt == null || endAt == null) continue;
+
+      final uid = '${activity.createdAt.millisecondsSinceEpoch}'
+          '${activity.name.hashCode}@catatin.app';
+      final now = formatDt(DateTime.now());
+
+      buffer.writeln('BEGIN:VEVENT');
+      buffer.writeln('UID:$uid');
+      buffer.writeln('DTSTAMP:$now');
+      buffer.writeln('DTSTART:${formatDt(startAt)}');
+      buffer.writeln('DTEND:${formatDt(endAt)}');
+      buffer.writeln('SUMMARY:${escapeICS(activity.name)}');
+      buffer.writeln('CATEGORIES:${escapeICS(activity.category)}');
+
+      final description = [
+        'Category: ${activity.category}',
+        'Time Value: ${activity.timeValue}',
+        if (activity.notes != null && activity.notes.isNotEmpty)
+          'Notes: ${activity.notes}',
+      ].join('\\n');
+      buffer.writeln('DESCRIPTION:$description');
+
+      buffer.writeln('END:VEVENT');
+    }
+
+    buffer.writeln('END:VCALENDAR');
+
+    await file.writeAsString(buffer.toString());
+    return file;
+  }
+
+  Future<void> _importData(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'ics', 'json'],
+      );
+
+      if (result == null || result.files.single.path == null) {
+        return; // User canceled
+      }
+
+      final file = File(result.files.single.path!);
+      final extension = result.files.single.extension?.toLowerCase();
+      final content = await file.readAsString();
+
+      int importedCount = 0;
+      final box = ref.read(activityBoxProvider);
+
+      if (extension == 'json') {
+        final data = jsonDecode(content);
+        final activitiesList = data['activities'] as List;
+        for (final item in activitiesList) {
+          final activity = ActivityModel(
+            name: item['name'],
+            createdAt: DateTime.parse(item['createdAt']),
+            category: item['category'],
+            startAt: item['startAt'] != null ? DateTime.parse(item['startAt']) : null,
+            endAt: item['endAt'] != null ? DateTime.parse(item['endAt']) : null,
+            isRunning: item['isRunning'] ?? false,
+            timeValue: item['timeValue'],
+          );
+          await box.add(activity);
+          importedCount++;
+        }
+      } else if (extension == 'csv') {
+        final List<List<dynamic>> rowsAsListOfValues = const CsvToListConverter().convert(content);
+        if (rowsAsListOfValues.isNotEmpty) {
+          for (int i = 1; i < rowsAsListOfValues.length; i++) {
+            final row = rowsAsListOfValues[i];
+            if (row.length >= 3) {
+              final name = row[0].toString();
+              final category = row[1].toString();
+              final timeValue = row[2].toString();
+              final startAtStr = row.length > 3 ? row[3].toString() : '';
+              final endAtStr = row.length > 4 ? row[4].toString() : '';
+              final notes = row.length > 6 ? row[6].toString() : '';
+
+              final activity = ActivityModel(
+                name: name,
+                createdAt: DateTime.now(),
+                category: category,
+                timeValue: timeValue.isNotEmpty ? timeValue : 'kebutuhan',
+                startAt: startAtStr.isNotEmpty ? DateTime.tryParse(startAtStr) : null,
+                endAt: endAtStr.isNotEmpty ? DateTime.tryParse(endAtStr) : null,
+                notes: notes.isNotEmpty ? notes : null,
+              );
+              await box.add(activity);
+              importedCount++;
+            }
+          }
+        }
+      } else if (extension == 'ics') {
+        final lines = content.split('\n');
+        String? currentSummary;
+        String? currentCategory;
+        DateTime? currentStart;
+        DateTime? currentEnd;
+        String? currentDescription;
+        
+        for (String line in lines) {
+          line = line.trim();
+          if (line == 'BEGIN:VEVENT') {
+            currentSummary = null;
+            currentCategory = 'Lainnya';
+            currentStart = null;
+            currentEnd = null;
+            currentDescription = null;
+          } else if (line.startsWith('SUMMARY:')) {
+            currentSummary = line.substring(8).replaceAll('\\,', ',').replaceAll('\\;', ';');
+          } else if (line.startsWith('CATEGORIES:')) {
+            currentCategory = line.substring(11);
+          } else if (line.startsWith('DTSTART:')) {
+            final dtStr = line.substring(8);
+            if (dtStr.length >= 15) {
+              final formatted = '${dtStr.substring(0,4)}-${dtStr.substring(4,6)}-${dtStr.substring(6,8)}T${dtStr.substring(9,11)}:${dtStr.substring(11,13)}:${dtStr.substring(13,15)}Z';
+              currentStart = DateTime.tryParse(formatted)?.toLocal();
+            }
+          } else if (line.startsWith('DTEND:')) {
+            final dtStr = line.substring(6);
+            if (dtStr.length >= 15) {
+              final formatted = '${dtStr.substring(0,4)}-${dtStr.substring(4,6)}-${dtStr.substring(6,8)}T${dtStr.substring(9,11)}:${dtStr.substring(11,13)}:${dtStr.substring(13,15)}Z';
+              currentEnd = DateTime.tryParse(formatted)?.toLocal();
+            }
+          } else if (line.startsWith('DESCRIPTION:')) {
+            currentDescription = line.substring(12).replaceAll('\\n', '\n');
+          } else if (line == 'END:VEVENT') {
+            if (currentSummary != null) {
+              String timeValue = 'kebutuhan';
+              String notes = '';
+              if (currentDescription != null) {
+                final descLines = currentDescription.split('\n');
+                for (final descLine in descLines) {
+                  if (descLine.startsWith('Time Value: ')) {
+                    timeValue = descLine.substring(12);
+                  } else if (descLine.startsWith('Notes: ')) {
+                    notes = descLine.substring(7);
+                  }
+                }
+              }
+              final activity = ActivityModel(
+                name: currentSummary,
+                createdAt: DateTime.now(),
+                category: currentCategory ?? 'Lainnya',
+                startAt: currentStart,
+                endAt: currentEnd,
+                timeValue: timeValue,
+                notes: notes.isNotEmpty ? notes : null,
+              );
+              await box.add(activity);
+              importedCount++;
+            }
+          }
+        }
+      }
+
+      ref.read(activityListProvider.notifier).loadActivities();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Berhasil mengimpor $importedCount aktivitas')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengimpor file: $e')),
+        );
+      }
+    }
   }
 }
 
@@ -416,6 +722,67 @@ class _SettingsSwitchTile extends StatelessWidget {
         value: value,
         onChanged: onChanged,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    );
+  }
+}
+
+class _ExportOptionTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ExportOptionTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ],
+          ),
+        ),
       ),
     );
   }

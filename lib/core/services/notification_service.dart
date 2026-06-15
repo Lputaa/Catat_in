@@ -30,6 +30,24 @@ class NotificationService {
     );
 
     await _requestPermission();
+    await _createChannels();
+  }
+
+  static Future<void> _createChannels() async {
+    final androidImplementation = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
+    // Tracking channel — used for template activity notifications
+    await androidImplementation?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'tracking_channel',
+        'Tracking Aktivitas',
+        description: 'Notifikasi saat tracking berjalan',
+        importance: Importance.high,
+        playSound: true,
+      ),
+    );
   }
 
   static Future<void>
@@ -92,7 +110,7 @@ class NotificationService {
     const androidDetails = AndroidNotificationDetails(
       'daily_reminder_channel',
       'Daily Reminder',
-      icon: '@mipmap/ic_launcher',
+      icon: '@drawable/notification_icon',
       channelDescription: 'Reminder harian Catat-In',
       importance: Importance.max,
       priority: Priority.high,
@@ -117,5 +135,74 @@ class NotificationService {
   static Future<void> cancelDailyReminder() async {
     await _notifications.cancel(1);
     debugPrint('PERIODIC REMINDER CANCELLED');
+  }
+
+  // ── Tracking Activity Notification ────────────────────────────────
+  static const _trackingNotificationId = 100;
+
+  /// Show a standard notification while a template activity is running.
+  /// User can dismiss it anytime by swiping.
+  static Future<void> showTrackingNotification(
+    String name,
+    String emoji,
+  ) async {
+    const androidDetails = AndroidNotificationDetails(
+      'tracking_channel',
+      'Tracking Aktivitas',
+      channelDescription: 'Notifikasi saat tracking berjalan',
+      icon: '@drawable/notification_icon',
+      importance: Importance.high,
+      priority: Priority.high,
+      autoCancel: true,
+      playSound: true,
+    );
+
+    const details = NotificationDetails(android: androidDetails);
+
+    await _notifications.show(
+      _trackingNotificationId,
+      '$emoji $name dimulai',
+      'Tracking sedang berjalan. Ketuk untuk membuka app.',
+      details,
+    );
+
+    debugPrint('TRACKING NOTIFICATION SHOWN: $emoji $name');
+  }
+
+  /// Cancel the ongoing tracking notification and show a "saved" notification.
+  static Future<void> finishTrackingNotification(
+    String name,
+    String emoji,
+  ) async {
+    // Cancel the ongoing notification
+    await _notifications.cancel(_trackingNotificationId);
+
+    // Show a brief "saved" notification (dismissible by user)
+    const androidDetails = AndroidNotificationDetails(
+      'tracking_channel',
+      'Tracking Aktivitas',
+      channelDescription: 'Notifikasi saat tracking berjalan',
+      icon: '@drawable/notification_icon',
+      importance: Importance.high,
+      priority: Priority.high,
+      autoCancel: true,
+      playSound: true,
+    );
+
+    const details = NotificationDetails(android: androidDetails);
+
+    await _notifications.show(
+      _trackingNotificationId + 1,
+      '$emoji $name tersimpan!',
+      'Aktivitas berhasil dicatat.',
+      details,
+    );
+
+    debugPrint('FINISH NOTIFICATION SHOWN: $emoji $name');
+  }
+
+  /// Cancel the tracking notification without showing a saved notification.
+  static Future<void> cancelTrackingNotification() async {
+    await _notifications.cancel(_trackingNotificationId);
   }
 }

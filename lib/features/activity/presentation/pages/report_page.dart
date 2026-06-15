@@ -3,6 +3,7 @@ import 'package:catat_in/features/activity/presentation/providers/activity_provi
 import 'package:catat_in/features/activity/presentation/widgets/catat_in_app_bar.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ReportPage extends ConsumerWidget {
@@ -18,7 +19,6 @@ class ReportPage extends ConsumerWidget {
     int totalScoreWeighted = 0;
     final timeValueMinutes = <TimeValue, int>{};
     final categoryMinutes = <String, int>{};
-    final tagCount = <String, int>{};
 
     for (final a in activities) {
       if (a.startAt == null || a.endAt == null) continue;
@@ -30,10 +30,6 @@ class ReportPage extends ConsumerWidget {
       totalScoreWeighted += tv.score * dur;
       timeValueMinutes[tv] = (timeValueMinutes[tv] ?? 0) + dur;
       categoryMinutes[a.category] = (categoryMinutes[a.category] ?? 0) + dur;
-
-      for (final tag in a.tags) {
-        tagCount[tag] = (tagCount[tag] ?? 0) + 1;
-      }
     }
 
     final avgScore = totalMinutes == 0
@@ -47,11 +43,6 @@ class ReportPage extends ConsumerWidget {
     final topCategories = categoryMinutes.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final displayCategories = topCategories.take(5).toList();
-
-    // Top tags (sorted by count, top 8)
-    final topTags = tagCount.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final displayTags = topTags.take(8).toList();
 
     // ── Daily category data (last 7 days) ──
     final now = DateTime.now();
@@ -166,31 +157,16 @@ class ReportPage extends ConsumerWidget {
             ],
           ),
 
-          // ── Daily Category Stacked Bar Chart ──
+          const SizedBox(height: 24), // Added spacing
+
+          // ── Charts Carousel ──
           if (activities.isNotEmpty) ...[
-            _sectionHeader(theme, Icons.bar_chart_rounded, 'Kategori per Hari'),
-            const SizedBox(height: 12),
-            _DailyCategoryChart(
+            _ChartCarousel(
               dailyCategoryData: dailyCategoryData,
               categories: sortedDayCategories,
-            ),
-          ],
-
-          const SizedBox(height: 24),
-
-          // ── TimeValue Donut Chart ──
-          if (totalMinutes > 0) ...[
-            _sectionHeader(
-              theme,
-              Icons.stars_rounded,
-              'Distribusi Nilai Waktu',
-            ),
-            const SizedBox(height: 12),
-            _TimeValueDonut(
               timeValueMinutes: timeValueMinutes,
               totalMinutes: totalMinutes,
             ),
-            const SizedBox(height: 12),
           ],
 
           const SizedBox(height: 24),
@@ -216,31 +192,7 @@ class ReportPage extends ConsumerWidget {
           ],
 
           const SizedBox(height: 24),
-
-          // ── Top Tags ──
-          if (displayTags.isNotEmpty) ...[
-            _sectionHeader(theme, Icons.local_offer_rounded, 'Tag Populer'),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: displayTags.map((e) {
-                return Chip(
-                  avatar: Text(
-                    '${e.value}x',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  label: Text(e.key),
-                );
-              }).toList(),
-            ),
-          ],
-
-          const SizedBox(height: 24),
-        ],
+        ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.05, curve: Curves.easeOutQuad),
       ),
     );
   }
@@ -287,6 +239,108 @@ class ReportPage extends ConsumerWidget {
       'Lainnya': '📌',
     };
     return map[cat] ?? '📌';
+  }
+}
+
+// ─── Chart Carousel ─────────────────────────────────────────────────────────
+class _ChartCarousel extends StatefulWidget {
+  final List<Map<String, dynamic>> dailyCategoryData;
+  final List<String> categories;
+  final Map<TimeValue, int> timeValueMinutes;
+  final int totalMinutes;
+
+  const _ChartCarousel({
+    required this.dailyCategoryData,
+    required this.categories,
+    required this.timeValueMinutes,
+    required this.totalMinutes,
+  });
+
+  @override
+  State<_ChartCarousel> createState() => _ChartCarouselState();
+}
+
+class _ChartCarouselState extends State<_ChartCarousel> {
+  final _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final pages = <Widget>[];
+
+    if (widget.dailyCategoryData.isNotEmpty) {
+      pages.add(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ReportPage._sectionHeader(theme, Icons.bar_chart_rounded, 'Kategori per Hari'),
+            const SizedBox(height: 12),
+            _DailyCategoryChart(
+              dailyCategoryData: widget.dailyCategoryData,
+              categories: widget.categories,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (widget.totalMinutes > 0) {
+      pages.add(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ReportPage._sectionHeader(theme, Icons.stars_rounded, 'Distribusi Nilai Waktu'),
+            const SizedBox(height: 12),
+            _TimeValueDonut(
+              timeValueMinutes: widget.timeValueMinutes,
+              totalMinutes: widget.totalMinutes,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (pages.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 380, // Allow enough space for legends
+          child: PageView(
+            controller: _pageController,
+            onPageChanged: (idx) => setState(() => _currentPage = idx),
+            children: pages,
+          ),
+        ),
+        if (pages.length > 1) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(pages.length, (index) {
+              final isActive = _currentPage == index;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                width: isActive ? 24 : 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              );
+            }),
+          ),
+        ],
+      ],
+    );
   }
 }
 
@@ -344,6 +398,10 @@ class _HeroGradeCard extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                       color: gradeColor,
                     ),
+                  ).animate(delay: 600.ms).scale(
+                    begin: const Offset(0.5, 0.5),
+                    duration: 800.ms,
+                    curve: Curves.elasticOut,
                   ),
                 ),
               ),
@@ -352,21 +410,50 @@ class _HeroGradeCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    avgScore.toStringAsFixed(1),
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      color: theme.colorScheme.onSurface,
-                    ),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0.0, end: avgScore),
+                    duration: const Duration(milliseconds: 1500),
+                    curve: Curves.easeOutExpo,
+                    builder: (context, value, child) {
+                      return Text(
+                        value.toStringAsFixed(1),
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w800,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      );
+                    },
                   ),
-                  Text(
-                    'Skor Rata-rata',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Skor Rata-rata',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () {
+                          showModalBottomSheet(
+                            context: context,
+                            builder: (context) => const _ScoreInfoSheet(),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.info_outline_rounded,
+                            size: 16,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -383,6 +470,57 @@ class _HeroGradeCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ScoreInfoSheet extends StatelessWidget {
+  const _ScoreInfoSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Penjelasan Skor',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Skor dihitung dari nilai waktu (bobot) setiap aktivitas yang kamu catat dikalikan dengan durasinya. Berikut adalah nilai bobot masing-masing aktivitas:\n\n'
+              '⭐ Investasi: 5 Poin\n'
+              '✅ Produktif: 4 Poin\n'
+              '🔧 Kebutuhan: 3 Poin\n'
+              '🎯 Santai: 2 Poin\n'
+              '⚠️ Terbuang: 1 Poin\n\n'
+              'Rata-rata tertimbang akan menentukan Grade akhirmu. Semakin tinggi rata-rata skormu (mendekati 5.0), semakin produktif dan berharga waktu yang kamu habiskan!',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Mengerti'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -405,16 +543,21 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {}, // Adds ripple effect
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.15)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
           Text(icon, style: const TextStyle(fontSize: 20)),
           const SizedBox(height: 8),
           FittedBox(
@@ -443,8 +586,10 @@ class _StatCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+   ),
+  );
+ }
 }
 
 // ─── Daily Category Stacked Bar Chart ────────────────────────────────────────
