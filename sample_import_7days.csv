@@ -1,0 +1,54 @@
+Nama,Kategori,Nilai Waktu,Mulai,Selesai,Durasi (menit),Catatan
+Sholat Subuh,Ibadah,investasi,2026-06-10T04:30:00.000,2026-06-10T05:00:00.000,30,Sholat subuh berjamaah
+Makan Pagi,Keseharian,kebutuhan,2026-06-10T06:30:00.000,2026-06-10T07:00:00.000,30,Sarapan bubur ayam
+Coding,Kerja,investasi,2026-06-10T08:00:00.000,2026-06-10T12:00:00.000,240,Mengerjakan fitur dashboard admin
+Sholat Dzuhur,Ibadah,investasi,2026-06-10T12:15:00.000,2026-06-10T12:45:00.000,30,
+Makan Siang,Keseharian,kebutuhan,2026-06-10T12:45:00.000,2026-06-10T13:15:00.000,30,
+Belajar Dart,Belajar,investasi,2026-06-10T14:00:00.000,2026-06-10T16:00:00.000,120,Belajar asynchronous programming
+Olahraga Sore,Olahraga,produktif,2026-06-10T17:00:00.000,2026-06-10T18:00:00.000,60,Jogging 5km
+Sholat Subuh,Ibadah,investasi,2026-06-11T04:30:00.000,2026-06-11T05:00:00.000,30,
+Perjalanan,Keseharian,kebutuhan,2026-06-11T06:00:00.000,2026-06-11T07:00:00.000,60,Naik motor ke kampus
+Kuliah,Belajar,investasi,2026-06-11T08:00:00.000,2026-06-11T11:30:00.000,210,Mata kuliah Basis Data
+Sholat Dzuhur,Ibadah,investasi,2026-06-11T12:15:00.000,2026-06-11T12:45:00.000,30,
+Makan Siang,Keseharian,kebutuhan,2026-06-11T12:45:00.000,2026-06-11T13:15:00.000,30,
+Kerja Kelompok,Sosial,kebutuhan,2026-06-11T14:00:00.000,2026-06-11T16:30:00.000,150,Tugas kelompok Basis Data di perpus
+Nonton Film,Hiburan,santai,2026-06-11T19:00:00.000,2026-06-11T21:00:00.000,120,Nonton film di Netflix
+Sholat Subuh,Ibadah,investasi,2026-06-12T04:30:00.000,2026-06-12T05:00:00.000,30,
+Makan Pagi,Keseharian,kebutuhan,2026-06-12T06:30:00.000,2026-06-12T07:00:00.000,30,
+Meeting,Kerja,kebutuhan,2026-06-12T09:00:00.000,2026-06-12T10:30:00.000,90,Standup meeting dan review sprint
+Coding,Kerja,investasi,2026-06-12T10:30:00.000,2026-06-12T12:00:00.000,90,Implementasi API endpoint baru
+Sholat Dzuhur,Ibadah,investasi,2026-06-12T12:15:00.000,2026-06-12T12:45:00.000,30,
+Gym,Olahraga,produktif,2026-06-12T16:00:00.000,2026-06-12T17:30:00.000,90,Latihan upper body dan cardio
+Membaca Buku,Belajar,investasi,2026-06-12T20:00:00.000,2026-06-12T21:30:00.000,90,Membaca Clean Code chapter 3
+Sholat Subuh,Ibadah,investasi,2026-06-13T04:30:00.000,2026-06-13T05:00:00.000,30,
+Makan Pagi,Keseharian,kebutuhan,2026-06-13T07:00:00.000,2026-06-13T07:30:00.000,30,
+Gawe,Kerja,produktif,2026-06-13T08:00:00.000,2026-06-13T12:00:00.000,240,Fix bug pada fitur notifikasi
+Sholat Dzuhur,Ibadah,investasi,2026-06-13T12:15:00.000,2026-06-13T12:45:00.000,30,
+Makan Siang,Keseharian,kebutuhan,2026-06-13T12:45:00.000,2026-06-13T13:15:00.000,30,
+Scrolling Medsos,Hiburan,terbuang,2026-06-13T14:00:00.000,2026-06-13T15:30:00.000,90,Kebiasaan buruk harus dikurangi
+Organisasi,Sosial,investasi,2026-06-13T16:00:00.000,2026-06-13T18:00:00.000,120,Rapat BEM persiapan event
+Sholat Subuh,Ibadah,investasi,2026-06-14T04:30:00.000,2026-06-14T05:00:00.000,30,
+Makan Pagi,Keseharian,kebutuhan,2026-06-14T07:30:00.000,2026-06-14T08:00:00.000,30,
+Coding Weekend,Kerja,investasi,2026-06-14T09:00:00.000,2026-06-14T12:00:00.000,180,Side project aplikasi todo list
+Sholat Dzuhur,Ibadah,investasi,2026-06-14T12:15:00.000,2026-06-14T12:45:00.000,30,
+Jalan-jalan,Hiburan,santai,2026-06-14T15:00:00.000,2026-06-14T18:00:00.000,180,Jalan-jalan ke mall bareng teman
+Kerkom,Sosial,kebutuhan,2026-06-14T19:00:00.000,2026-06-14T21:00:00.000,120,Kerja kelompok tugas akhir
+Sholat Subuh,Ibadah,investasi,2026-06-15T04:30:00.000,2026-06-15T05:00:00.000,30,
+Makan Pagi,Keseharian,kebutuhan,2026-06-15T06:30:00.000,2026-06-15T07:00:00.000,30,
+Perjalanan,Keseharian,kebutuhan,2026-06-15T07:00:00.000,2026-06-15T07:45:00.000,45,
+Coding,Kerja,investasi,2026-06-15T08:00:00.000,2026-06-15T12:00:00.000,240,Refactoring module authentication
+Sholat Dzuhur,Ibadah,investasi,2026-06-15T12:15:00.000,2026-06-15T12:45:00.000,30,
+Makan Siang,Keseharian,kebutuhan,2026-06-15T12:45:00.000,2026-06-15T13:15:00.000,30,
+Belajar Flutter,Belajar,investasi,2026-06-15T14:00:00.000,2026-06-15T16:00:00.000,120,Tutorial widget animation
+Renang,Olahraga,produktif,2026-06-15T16:30:00.000,2026-06-15T17:30:00.000,60,Renang 1km di kolam umum
+Nonton YouTube,Hiburan,santai,2026-06-15T20:00:00.000,2026-06-15T21:30:00.000,90,
+Sholat Subuh,Ibadah,investasi,2026-06-16T04:30:00.000,2026-06-16T05:00:00.000,30,
+Makan Pagi,Keseharian,kebutuhan,2026-06-16T06:30:00.000,2026-06-16T07:00:00.000,30,Nasi uduk
+Perjalanan ke Kantor,Keseharian,kebutuhan,2026-06-16T07:00:00.000,2026-06-16T07:45:00.000,45,
+Coding,Kerja,investasi,2026-06-16T08:00:00.000,2026-06-16T12:00:00.000,240,Implementasi fitur export ICS
+Meeting Sprint Planning,Kerja,kebutuhan,2026-06-16T12:30:00.000,2026-06-16T13:30:00.000,60,Diskusi roadmap Q3
+Sholat Dzuhur,Ibadah,investasi,2026-06-16T13:30:00.000,2026-06-16T14:00:00.000,30,
+Makan Siang,Keseharian,kebutuhan,2026-06-16T14:00:00.000,2026-06-16T14:30:00.000,30,
+Belajar Riverpod,Belajar,investasi,2026-06-16T15:00:00.000,2026-06-16T16:30:00.000,90,Deep dive state management
+Olahraga Lari,Olahraga,produktif,2026-06-16T17:00:00.000,2026-06-16T18:00:00.000,60,Lari 5km di taman
+Membaca Buku,Belajar,investasi,2026-06-16T20:00:00.000,2026-06-16T21:00:00.000,60,Membaca Atomic Habits chapter 5

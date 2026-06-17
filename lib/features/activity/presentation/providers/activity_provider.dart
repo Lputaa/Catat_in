@@ -64,12 +64,16 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
 
   /// Start tracking from a template — all fields pre-filled, auto-save on stop.
   Future<void> startFromTemplate(ActivityTemplateModel template) async {
-    await startActivity(
-      name: template.name,
-      category: template.category,
-      templateName: template.name,
-      timeValue: template.timeValue,
-    );
+    try {
+      await startActivity(
+        name: template.name,
+        category: template.category,
+        templateName: template.name,
+        timeValue: template.timeValue,
+      );
+    } catch (e) {
+      debugPrint('startFromTemplate error: $e');
+    }
   }
 
   Future<void> finishRunningActivity({
@@ -118,21 +122,25 @@ class ActivityNotifier extends StateNotifier<List<ActivityModel>> {
       return;
     }
 
-    final finished = ActivityModel(
-      name: running.name,
-      createdAt: running.createdAt,
-      category: running.category,
-      startAt: running.startAt,
-      endAt: DateTime.now(),
-      isRunning: false,
-      notes: running.notes,
-      timeValue: running.timeValue,
-      templateName: running.templateName,
-    );
+    try {
+      final finished = ActivityModel(
+        name: running.name,
+        createdAt: running.createdAt,
+        category: running.category,
+        startAt: running.startAt,
+        endAt: DateTime.now(),
+        isRunning: false,
+        notes: running.notes,
+        timeValue: running.timeValue,
+        templateName: running.templateName,
+      );
 
-    await box.put(running.key, finished);
+      await box.put(running.key, finished);
 
-    loadActivities();
+      loadActivities();
+    } catch (e) {
+      debugPrint('stopActivity error: $e');
+    }
   }
 
   final Box<ActivityModel> box;

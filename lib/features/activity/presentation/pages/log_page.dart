@@ -1,13 +1,13 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:catat_in/core/services/notification_service.dart';
 import 'package:catat_in/features/activity/data/models/activity_model.dart';
-import 'package:catat_in/features/activity/data/models/activity_template_model.dart';
 import 'package:catat_in/features/activity/domain/activity_category.dart';
 import 'package:catat_in/features/activity/domain/time_value.dart';
 import 'package:catat_in/features/activity/presentation/providers/activity_provider.dart';
-import 'package:catat_in/features/activity/presentation/providers/template_provider.dart';
+import 'package:catat_in/features/activity/presentation/widgets/log/template_section.dart';
+import 'package:catat_in/features/activity/presentation/widgets/log/time_picker_button.dart';
+import 'package:catat_in/features/activity/presentation/widgets/log/timer_ring_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -303,7 +303,7 @@ class _LogPageState extends ConsumerState<LogPage> {
                   children: [
                     SizedBox.expand(
                       child: CustomPaint(
-                        painter: _TimerRingPainter(
+                        painter: TimerRingPainter(
                           progress: (currentDuration.inSeconds % 60) / 60,
                           color: theme.colorScheme.primary,
                           trackColor:
@@ -439,7 +439,7 @@ class _LogPageState extends ConsumerState<LogPage> {
                   children: [
                     SizedBox.expand(
                       child: CustomPaint(
-                        painter: _TimerRingPainter(
+                        painter: TimerRingPainter(
                           progress: 0,
                           color: theme.colorScheme.outlineVariant,
                           trackColor:
@@ -496,143 +496,10 @@ class _LogPageState extends ConsumerState<LogPage> {
             ),
             const SizedBox(height: 20),
             // ── Template quick-start section ──
-            _buildTemplateSection(context, ref, theme),
+            const TemplateQuickStartSection(),
           ],
         ],
       ),
-    );
-  }
-
-  void _confirmAndStartTemplate(
-      BuildContext context, WidgetRef ref, ActivityTemplateModel t) {
-    final tv = TimeValue.fromString(t.timeValue);
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64, height: 64,
-              decoration: BoxDecoration(
-                color: tv.color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: tv.color.withValues(alpha: 0.25)),
-              ),
-              alignment: Alignment.center,
-              child: Text(t.emoji, style: const TextStyle(fontSize: 32)),
-            ),
-            const SizedBox(height: 16),
-            Text('Mulai tracking?',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 4),
-            Text(t.name,
-                style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text('${t.category} · ${tv.shortLabel}',
-                style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Text('Batal'),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      ref.read(activityListProvider.notifier)
-                          .startFromTemplate(t);
-                      NotificationService.showTrackingNotification(
-                          t.name, t.emoji);
-                    },
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Text('Mulai'),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Template quick-start section ─────────────────────────────────
-  Widget _buildTemplateSection(
-      BuildContext context, WidgetRef ref, ThemeData theme) {
-    final templates = ref.watch(templateListProvider);
-    if (templates.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.bolt_rounded, size: 16,
-                  color: theme.colorScheme.secondary),
-            ),
-            const SizedBox(width: 10),
-            Text('Mulai Cepat',
-                style: TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w600)),
-            const Spacer(),
-            Text(
-              '${templates.length} template',
-              style: TextStyle(
-                fontSize: 12,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 44,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: templates.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 8),
-            itemBuilder: (ctx, i) {
-              final t = templates[i];
-              final tv = TimeValue.fromString(t.timeValue);
-              return ActionChip(
-                avatar: Text(t.emoji, style: const TextStyle(fontSize: 16)),
-                label: Text(t.name, style: const TextStyle(fontSize: 13)),
-                backgroundColor: tv.color.withValues(alpha: 0.08),
-                side: BorderSide(
-                  color: tv.color.withValues(alpha: 0.25),
-                ),
-                onPressed: () {
-                  _confirmAndStartTemplate(context, ref, t);
-                },
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 
@@ -683,7 +550,7 @@ class _LogPageState extends ConsumerState<LogPage> {
           Row(
             children: [
               Expanded(
-                child: _TimePickerButton(
+                child: TimePickerButton(
                   icon: Icons.play_circle_outline_rounded,
                   label: 'Mulai',
                   time: startAt,
@@ -696,7 +563,7 @@ class _LogPageState extends ConsumerState<LogPage> {
                     color: theme.colorScheme.onSurfaceVariant),
               ),
               Expanded(
-                child: _TimePickerButton(
+                child: TimePickerButton(
                   icon: Icons.stop_circle_outlined,
                   label: 'Selesai',
                   time: endAt,
@@ -785,7 +652,7 @@ class _LogPageState extends ConsumerState<LogPage> {
                   selectedCategory = ActivityCategory.lainnya;
                   selectedTimeValue = TimeValue.kebutuhan;
                 });
-                if (!mounted) return;
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Aktivitas berhasil disimpan!'),
@@ -907,127 +774,6 @@ class _LogPageState extends ConsumerState<LogPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Timer ring painter ─────────────────────────────────────────────────────
-class _TimerRingPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final Color trackColor;
-
-  _TimerRingPainter({
-    required this.progress,
-    required this.color,
-    required this.trackColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 8;
-    const strokeWidth = 6.0;
-
-    // Track
-    final trackPaint = Paint()
-      ..color = trackColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-    canvas.drawCircle(center, radius, trackPaint);
-
-    // Progress arc
-    if (progress > 0) {
-      final progressPaint = Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -math.pi / 2,
-        2 * math.pi * progress,
-        false,
-        progressPaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _TimerRingPainter old) =>
-      old.progress != progress || old.color != color;
-}
-
-// ─── Time picker button ─────────────────────────────────────────────────────
-class _TimePickerButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final DateTime? time;
-  final VoidCallback onTap;
-
-  const _TimePickerButton({
-    required this.icon,
-    required this.label,
-    required this.time,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasTime = time != null;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            color: hasTime
-                ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
-                : theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: hasTime
-                  ? theme.colorScheme.primary.withValues(alpha: 0.25)
-                  : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, size: 20,
-                  color: hasTime ? theme.colorScheme.primary : null),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: TextStyle(
-                    fontSize: 11,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  )),
-                  const SizedBox(height: 2),
-                  Text(
-                    hasTime
-                        ? '${time!.hour.toString().padLeft(2, '0')}:'
-                            '${time!.minute.toString().padLeft(2, '0')}'
-                        : '--:--',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: hasTime ? theme.colorScheme.onSurface : null,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

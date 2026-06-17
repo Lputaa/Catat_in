@@ -1,18 +1,90 @@
+import 'package:catat_in/features/activity/domain/category_meta.dart';
 import 'package:catat_in/features/activity/domain/time_value.dart';
+import 'package:catat_in/features/activity/presentation/pages/log_page.dart';
 import 'package:catat_in/features/activity/presentation/providers/activity_provider.dart';
 import 'package:catat_in/features/activity/presentation/widgets/catat_in_app_bar.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ReportPage extends ConsumerWidget {
+// ─── #1: Time Range Enum ────────────────────────────────────────────────────
+enum ReportRange { week, month, custom }
+
+class ReportPage extends ConsumerStatefulWidget {
   const ReportPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final activities = ref.watch(activityListProvider);
+  ConsumerState<ReportPage> createState() => _ReportPageState();
+}
+
+class _ReportPageState extends ConsumerState<ReportPage> {
+  ReportRange _range = ReportRange.week;
+  DateTimeRange? _customRange;
+
+  // ── #1: Filter activities by selected range ──
+  List<T> _filterByRange<T>(List<T> items, DateTime Function(T) getDate) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    switch (_range) {
+      case ReportRange.week:
+        final start = today.subtract(const Duration(days: 6));
+        return items.where((e) {
+          final d = getDate(e);
+          return !d.isBefore(start);
+        }).toList();
+      case ReportRange.month:
+        final start = today.subtract(const Duration(days: 29));
+        return items.where((e) {
+          final d = getDate(e);
+          return !d.isBefore(start);
+        }).toList();
+      case ReportRange.custom:
+        if (_customRange == null) return items;
+        return items.where((e) {
+          final d = getDate(e);
+          return !d.isBefore(_customRange!.start) &&
+              d.isBefore(_customRange!.end.add(const Duration(days: 1)));
+        }).toList();
+    }
+  }
+
+  int get _rangeDays {
+    switch (_range) {
+      case ReportRange.week:
+        return 7;
+      case ReportRange.month:
+        return 30;
+      case ReportRange.custom:
+        if (_customRange == null) return 7;
+        return _customRange!.end.difference(_customRange!.start).inDays + 1;
+    }
+  }
+
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      initialDateRange:
+          _customRange ??
+          DateTimeRange(start: now.subtract(const Duration(days: 6)), end: now),
+    );
+    if (picked != null) {
+      setState(() {
+        _customRange = picked;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allActivities = ref.watch(activityListProvider);
     final theme = Theme.of(context);
+
+    // #1: Filter by range
+    final activities = _filterByRange(allActivities, (a) => a.createdAt);
 
     // ── Compute stats ──
     int totalMinutes = 0;
@@ -39,17 +111,17 @@ class ReportPage extends ConsumerWidget {
         (timeValueMinutes[TimeValue.investasi] ?? 0) +
         (timeValueMinutes[TimeValue.produktif] ?? 0);
 
-    // Top categories (sorted by minutes, top 5)
+    // Top categories (sorted by minutes)
     final topCategories = categoryMinutes.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final displayCategories = topCategories.take(5).toList();
 
-    // ── Daily category data (last 7 days) ──
+    // ── Daily category data (based on range) ──
     final now = DateTime.now();
-    // Collect all categories that appear in the last 7 days
+    final days = _rangeDays.clamp(1, 60);
     final allDayCategories = <String>{};
-    final dailyCategoryData = List.generate(7, (i) {
-      final day = DateTime(now.year, now.month, now.day - (6 - i));
+    final dailyCategoryData = List.generate(days, (i) {
+      final day = DateTime(now.year, now.month, now.day - (days - 1 - i));
       final catMins = <String, int>{};
       for (final a in activities) {
         if (a.startAt == null || a.endAt == null) continue;
@@ -111,12 +183,30 @@ class ReportPage extends ConsumerWidget {
       return 'Ayo mulai investasikan waktumu dengan lebih baik!';
     }
 
+    // #8: Positive percentage
+    final positivePercent = totalMinutes > 0
+        ? (positiveMinutes / totalMinutes * 100).toStringAsFixed(0)
+        : '0';
+
     return Scaffold(
       appBar: const CatatInAppBar(title: 'RAPOR'),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ── Hero grade card ──
+          // ── #1: Time Range Filter ──
+          _TimeRangeSelector(
+            range: _range,
+            customRange: _customRange,
+            onRangeChanged: (r) async {
+              if (r == ReportRange.custom) {
+                await _pickCustomRange();
+              }
+              setState(() => _range = r);
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // ── Hero grade card (with #5 progress bar) ──
           _HeroGradeCard(
             grade: grade,
             gradeColor: gradeColor,
@@ -125,7 +215,7 @@ class ReportPage extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
 
-          // ── Stat grid ──
+          // ── Stat grid (#4 InkWell removed, #8 subtitle added) ──
           Row(
             children: [
               Expanded(
@@ -141,7 +231,7 @@ class ReportPage extends ConsumerWidget {
                 child: _StatCard(
                   icon: '⏱',
                   label: 'Total Waktu',
-                  value: _fmtHours(totalMinutes),
+                  value: CategoryMeta.formatDurationLong(totalMinutes),
                   color: theme.colorScheme.tertiary,
                 ),
               ),
@@ -150,16 +240,17 @@ class ReportPage extends ConsumerWidget {
                 child: _StatCard(
                   icon: '🚀',
                   label: 'Positif',
-                  value: _fmtHours(positiveMinutes),
+                  value: CategoryMeta.formatDurationLong(positiveMinutes),
+                  subtitle: '$positivePercent% dari total',
                   color: Colors.green,
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 24), // Added spacing
+          const SizedBox(height: 24),
 
-          // ── Charts Carousel ──
+          // ── Charts (#2 empty state, #9 tab labels) ──
           if (activities.isNotEmpty) ...[
             _ChartCarousel(
               dailyCategoryData: dailyCategoryData,
@@ -169,14 +260,28 @@ class ReportPage extends ConsumerWidget {
             ),
           ],
 
+          // ── #2: Informative empty state ──
+          if (activities.isEmpty) ...[
+            const SizedBox(height: 16),
+            _EmptyChartPlaceholder(
+              onStartLogging: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LogPage()),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+
           const SizedBox(height: 24),
 
-          // ── Category Breakdown ──
+          // ── Category Breakdown (#7 "Lihat semua") ──
           if (displayCategories.isNotEmpty) ...[
             _sectionHeader(theme, Icons.category_rounded, 'Kategori'),
             const SizedBox(height: 12),
             ...displayCategories.map((e) {
-              final emoji = _categoryEmoji(e.key);
+              final emoji = CategoryMeta.emojiFor(e.key);
               final pct = totalMinutes == 0 ? 0.0 : e.value / totalMinutes;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -185,15 +290,89 @@ class ReportPage extends ConsumerWidget {
                   name: e.key,
                   minutes: e.value,
                   percentage: pct,
-                  color: theme.colorScheme.primary,
+                  color: CategoryMeta.colorFor(e.key),
                 ),
               );
             }),
+            // #7: "Lihat semua" button
+            if (topCategories.length > 5)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Center(
+                  child: TextButton(
+                    onPressed: () => _showAllCategories(
+                      context,
+                      topCategories,
+                      totalMinutes,
+                    ),
+                    child: Text(
+                      'Lihat semua ${topCategories.length} kategori →',
+                    ),
+                  ),
+                ),
+              ),
           ],
 
           const SizedBox(height: 24),
-        ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.05, curve: Curves.easeOutQuad),
+        ],
       ),
+    );
+  }
+
+  // ── #7: Show all categories in a bottom sheet ──
+  void _showAllCategories(
+    BuildContext context,
+    List<MapEntry<String, int>> categories,
+    int totalMinutes,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Semua Kategori',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...categories.map((e) {
+                  final emoji = CategoryMeta.emojiFor(e.key);
+                  final pct = totalMinutes == 0 ? 0.0 : e.value / totalMinutes;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _CategoryRow(
+                      emoji: emoji,
+                      name: e.key,
+                      minutes: e.value,
+                      percentage: pct,
+                      color: CategoryMeta.colorFor(e.key),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Tutup'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -218,31 +397,144 @@ class ReportPage extends ConsumerWidget {
       ],
     );
   }
+}
 
-  static String _fmtHours(int minutes) {
-    if (minutes < 60) return '$minutes mnt';
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    if (m == 0) return '$h jam';
-    return '$h jam $m mnt';
-  }
+// ─── #1: Time Range Selector ─────────────────────────────────────────────────
+class _TimeRangeSelector extends StatelessWidget {
+  final ReportRange range;
+  final DateTimeRange? customRange;
+  final ValueChanged<ReportRange> onRangeChanged;
 
-  static String _categoryEmoji(String cat) {
-    const map = {
-      'Kerja': '🏢',
-      'Belajar': '📚',
-      'Olahraga': '🏃',
-      'Hiburan': '🎮',
-      'Keseharian': '🍽',
-      'Sosial': '👥',
-      'Ibadah': '🕌',
-      'Lainnya': '📌',
-    };
-    return map[cat] ?? '📌';
+  const _TimeRangeSelector({
+    required this.range,
+    required this.customRange,
+    required this.onRangeChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SegmentedButton<ReportRange>(
+          segments: const [
+            ButtonSegment(
+              value: ReportRange.week,
+              label: Text('7 Hari'),
+              icon: Icon(Icons.calendar_view_week, size: 16),
+            ),
+            ButtonSegment(
+              value: ReportRange.month,
+              label: Text('30 Hari'),
+              icon: Icon(Icons.calendar_month, size: 16),
+            ),
+            ButtonSegment(
+              value: ReportRange.custom,
+              label: Text('Custom'),
+              icon: Icon(Icons.date_range, size: 16),
+            ),
+          ],
+          selected: {range},
+          onSelectionChanged: (sel) => onRangeChanged(sel.first),
+          showSelectedIcon: false,
+        ),
+        if (range == ReportRange.custom && customRange != null) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              '${customRange!.start.day}/${customRange!.start.month}/${customRange!.start.year}'
+              ' – '
+              '${customRange!.end.day}/${customRange!.end.month}/${customRange!.end.year}',
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 
-// ─── Chart Carousel ─────────────────────────────────────────────────────────
+// ─── #2: Empty State Chart Placeholder ───────────────────────────────────────
+class _EmptyChartPlaceholder extends StatelessWidget {
+  final VoidCallback onStartLogging;
+
+  const _EmptyChartPlaceholder({required this.onStartLogging});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Skeleton bars
+          SizedBox(
+            height: 120,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _skeletonBar(theme, 0.3),
+                _skeletonBar(theme, 0.6),
+                _skeletonBar(theme, 0.4),
+                _skeletonBar(theme, 0.8),
+                _skeletonBar(theme, 0.5),
+                _skeletonBar(theme, 0.35),
+                _skeletonBar(theme, 0.65),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Icon(
+            Icons.insights_rounded,
+            size: 32,
+            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Catat 3 aktivitas pertamamu\nuntuk melihat grafik ini muncul!',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onStartLogging,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Mulai Catat'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _skeletonBar(ThemeData theme, double heightFraction) {
+    return Container(
+      width: 22,
+      height: 120 * heightFraction,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.08),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+      ),
+    );
+  }
+}
+
+// ─── #9: Chart Carousel with Tab Labels ──────────────────────────────────────
 class _ChartCarousel extends StatefulWidget {
   final List<Map<String, dynamic>> dailyCategoryData;
   final List<String> categories;
@@ -274,13 +566,18 @@ class _ChartCarouselState extends State<_ChartCarousel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final pages = <Widget>[];
+    final pageLabels = <String>[];
 
     if (widget.dailyCategoryData.isNotEmpty) {
       pages.add(
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ReportPage._sectionHeader(theme, Icons.bar_chart_rounded, 'Kategori per Hari'),
+            _ReportPageState._sectionHeader(
+              theme,
+              Icons.bar_chart_rounded,
+              'Berdasarkan Kategori',
+            ),
             const SizedBox(height: 12),
             _DailyCategoryChart(
               dailyCategoryData: widget.dailyCategoryData,
@@ -289,6 +586,7 @@ class _ChartCarouselState extends State<_ChartCarousel> {
           ],
         ),
       );
+      pageLabels.add('Kategori per Hari');
     }
 
     if (widget.totalMinutes > 0) {
@@ -296,7 +594,11 @@ class _ChartCarouselState extends State<_ChartCarousel> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ReportPage._sectionHeader(theme, Icons.stars_rounded, 'Distribusi Nilai Waktu'),
+            _ReportPageState._sectionHeader(
+              theme,
+              Icons.stars_rounded,
+              'Distribusi Nilai Waktu',
+            ),
             const SizedBox(height: 12),
             _TimeValueDonut(
               timeValueMinutes: widget.timeValueMinutes,
@@ -305,6 +607,7 @@ class _ChartCarouselState extends State<_ChartCarousel> {
           ],
         ),
       );
+      pageLabels.add('Nilai Waktu');
     }
 
     if (pages.isEmpty) return const SizedBox.shrink();
@@ -312,28 +615,60 @@ class _ChartCarouselState extends State<_ChartCarousel> {
     return Column(
       children: [
         SizedBox(
-          height: 380, // Allow enough space for legends
+          height: 380,
           child: PageView(
             controller: _pageController,
             onPageChanged: (idx) => setState(() => _currentPage = idx),
             children: pages,
           ),
         ),
+        // #9: Tab labels instead of dots
         if (pages.length > 1) ...[
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(pages.length, (index) {
+            children: List.generate(pageLabels.length, (index) {
               final isActive = _currentPage == index;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                width: isActive ? 24 : 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(4),
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: GestureDetector(
+                  onTap: () => _pageController.animateToPage(
+                    index,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? theme.colorScheme.primary.withValues(alpha: 0.15)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isActive
+                            ? theme.colorScheme.primary.withValues(alpha: 0.4)
+                            : theme.colorScheme.outlineVariant.withValues(
+                                alpha: 0.3,
+                              ),
+                      ),
+                    ),
+                    child: Text(
+                      pageLabels[index],
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: isActive
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: isActive
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
                 ),
               );
             }),
@@ -344,8 +679,8 @@ class _ChartCarouselState extends State<_ChartCarousel> {
   }
 }
 
-// ─── Hero Grade Card ────────────────────────────────────────────────────────
-class _HeroGradeCard extends StatelessWidget {
+// ─── #5, #10: Hero Grade Card ────────────────────────────────────────────────
+class _HeroGradeCard extends StatefulWidget {
   final String grade;
   final Color gradeColor;
   final double avgScore;
@@ -359,6 +694,38 @@ class _HeroGradeCard extends StatelessWidget {
   });
 
   @override
+  State<_HeroGradeCard> createState() => _HeroGradeCardState();
+}
+
+class _HeroGradeCardState extends State<_HeroGradeCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late final Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    // #10: Animation plays only once on first build
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.elasticOut),
+    );
+    // Delay start by 600ms like the original
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) _animController.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
@@ -366,14 +733,14 @@ class _HeroGradeCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            gradeColor.withValues(alpha: 0.15),
-            gradeColor.withValues(alpha: 0.05),
+            widget.gradeColor.withValues(alpha: 0.15),
+            widget.gradeColor.withValues(alpha: 0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: gradeColor.withValues(alpha: 0.25)),
+        border: Border.all(color: widget.gradeColor.withValues(alpha: 0.25)),
       ),
       child: Column(
         children: [
@@ -381,27 +748,26 @@ class _HeroGradeCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Grade circle
+              // Grade circle with #10 fixed animation
               Container(
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: gradeColor.withValues(alpha: 0.15),
+                  color: widget.gradeColor.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
-                  border: Border.all(color: gradeColor, width: 2.5),
+                  border: Border.all(color: widget.gradeColor, width: 2.5),
                 ),
                 child: Center(
-                  child: Text(
-                    grade,
-                    style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w900,
-                      color: gradeColor,
+                  child: ScaleTransition(
+                    scale: _scaleAnimation,
+                    child: Text(
+                      widget.grade,
+                      style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        color: widget.gradeColor,
+                      ),
                     ),
-                  ).animate(delay: 600.ms).scale(
-                    begin: const Offset(0.5, 0.5),
-                    duration: 800.ms,
-                    curve: Curves.elasticOut,
                   ),
                 ),
               ),
@@ -411,7 +777,7 @@ class _HeroGradeCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0.0, end: avgScore),
+                    tween: Tween(begin: 0.0, end: widget.avgScore),
                     duration: const Duration(milliseconds: 1500),
                     curve: Curves.easeOutExpo,
                     builder: (context, value, child) {
@@ -459,9 +825,27 @@ class _HeroGradeCard extends StatelessWidget {
               ),
             ],
           ),
+          // #5: Score progress bar
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: widget.avgScore / 5.0),
+              duration: const Duration(milliseconds: 1500),
+              curve: Curves.easeOutExpo,
+              builder: (context, value, _) {
+                return LinearProgressIndicator(
+                  value: value.clamp(0.0, 1.0),
+                  color: widget.gradeColor,
+                  backgroundColor: widget.gradeColor.withValues(alpha: 0.15),
+                  minHeight: 8,
+                );
+              },
+            ),
+          ),
           const SizedBox(height: 14),
           Text(
-            summary,
+            widget.summary,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -475,6 +859,7 @@ class _HeroGradeCard extends StatelessWidget {
   }
 }
 
+// ─── #11: Score Info Sheet with Grade Table ───────────────────────────────────
 class _ScoreInfoSheet extends StatelessWidget {
   const _ScoreInfoSheet();
 
@@ -497,14 +882,84 @@ class _ScoreInfoSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+            // #11: Visual grade table
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.colorScheme.outlineVariant.withValues(
+                    alpha: 0.3,
+                  ),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(12),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          flex: 2,
+                          child: Text(
+                            'Grade',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        const Expanded(
+                          flex: 3,
+                          child: Text(
+                            'Skor',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            'Warna',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _gradeTableRow(theme, 'A', '≥ 4.5', Colors.amber),
+                  _gradeTableRow(theme, 'B', '≥ 3.5', Colors.green),
+                  _gradeTableRow(theme, 'C', '≥ 2.5', Colors.blue),
+                  _gradeTableRow(theme, 'D', '≥ 1.5', Colors.orange),
+                  _gradeTableRow(theme, 'E', '< 1.5', Colors.red, isLast: true),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(
-              'Skor dihitung dari nilai waktu (bobot) setiap aktivitas yang kamu catat dikalikan dengan durasinya. Berikut adalah nilai bobot masing-masing aktivitas:\n\n'
+              'Skor dihitung dari nilai waktu (bobot) setiap aktivitas yang kamu catat dikalikan dengan durasinya.\n\n'
               '⭐ Investasi: 5 Poin\n'
               '✅ Produktif: 4 Poin\n'
               '🔧 Kebutuhan: 3 Poin\n'
               '🎯 Santai: 2 Poin\n'
               '⚠️ Terbuang: 1 Poin\n\n'
-              'Rata-rata tertimbang akan menentukan Grade akhirmu. Semakin tinggi rata-rata skormu (mendekati 5.0), semakin produktif dan berharga waktu yang kamu habiskan!',
+              'Rata-rata tertimbang akan menentukan Grade akhirmu.',
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
@@ -524,40 +979,95 @@ class _ScoreInfoSheet extends StatelessWidget {
       ),
     );
   }
+
+  Widget _gradeTableRow(
+    ThemeData theme,
+    String grade,
+    String score,
+    Color color, {
+    bool isLast = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : Border(
+                bottom: BorderSide(
+                  color: theme.colorScheme.outlineVariant.withValues(
+                    alpha: 0.2,
+                  ),
+                ),
+              ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              grade,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                color: color,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(score, style: const TextStyle(fontSize: 13)),
+          ),
+          Expanded(
+            flex: 2,
+            child: Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.centerLeft,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-// ─── Stat Card ──────────────────────────────────────────────────────────────
+// ─── #4: Stat Card (InkWell removed, #8 subtitle added) ─────────────────────
 class _StatCard extends StatelessWidget {
   final String icon;
   final String label;
   final String value;
   final Color color;
+  final String? subtitle;
 
   const _StatCard({
     required this.icon,
     required this.label,
     required this.value,
     required this.color,
+    this.subtitle,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {}, // Adds ripple effect
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: 0.15)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(icon, style: const TextStyle(fontSize: 20)),
           const SizedBox(height: 8),
           FittedBox(
@@ -584,15 +1094,29 @@ class _StatCard extends StatelessWidget {
               ),
             ),
           ),
+          // #8: Subtitle for percentage
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                subtitle!,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: color.withValues(alpha: 0.8),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
-    ),
-   ),
-  );
- }
+    );
+  }
 }
 
-// ─── Daily Category Stacked Bar Chart ────────────────────────────────────────
+// ─── #3: Daily Category Stacked Bar Chart (Today highlight) ──────────────────
 class _DailyCategoryChart extends StatelessWidget {
   final List<Map<String, dynamic>> dailyCategoryData;
   final List<String> categories;
@@ -604,34 +1128,10 @@ class _DailyCategoryChart extends StatelessWidget {
 
   static const _dayLabels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 
-  static const _categoryColors = <String, Color>{
-    'Kerja': Color(0xFF5C6BC0),
-    'Belajar': Color(0xFF42A5F5),
-    'Olahraga': Color(0xFF66BB6A),
-    'Hiburan': Color(0xFFAB47BC),
-    'Keseharian': Color(0xFFFFA726),
-    'Sosial': Color(0xFF26C6DA),
-    'Ibadah': Color(0xFFEF5350),
-    'Lainnya': Color(0xFF78909C),
-  };
-
-  static Color _colorFor(String cat) =>
-      _categoryColors[cat] ?? const Color(0xFF78909C);
-
-  static const _categoryEmojis = <String, String>{
-    'Kerja': '🏢',
-    'Belajar': '📚',
-    'Olahraga': '🏃',
-    'Hiburan': '🎮',
-    'Keseharian': '🍽',
-    'Sosial': '👥',
-    'Ibadah': '🕌',
-    'Lainnya': '📌',
-  };
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final now = DateTime.now();
 
     // Compute max total hours in a single day for Y-axis scaling
     double maxHrs = 1;
@@ -663,14 +1163,14 @@ class _DailyCategoryChart extends StatelessWidget {
                     final buf = StringBuffer(
                       '$dayLabel ${day.day}/${day.month}\n',
                     );
+                    // #14: Consistent formatting
                     for (final cat in categories) {
                       final mins = catMap[cat] ?? 0;
                       if (mins <= 0) continue;
-                      final emoji = _categoryEmojis[cat] ?? '📌';
-                      final h = mins ~/ 60;
-                      final m = mins % 60;
-                      final time = h > 0 ? '${h}j ${m}m' : '${m}m';
-                      buf.write('$emoji $cat: $time\n');
+                      final emoji = CategoryMeta.emojiFor(cat);
+                      buf.write(
+                        '$emoji $cat: ${CategoryMeta.formatDuration(mins)}\n',
+                      );
                     }
                     return BarTooltipItem(
                       buf.toString().trimRight(),
@@ -711,6 +1211,7 @@ class _DailyCategoryChart extends StatelessWidget {
                   sideTitles: SideTitles(
                     showTitles: true,
                     interval: 1,
+                    reservedSize: 32,
                     getTitlesWidget: (v, meta) {
                       final idx = v.toInt();
                       if (idx < 0 || idx >= dailyCategoryData.length) {
@@ -718,22 +1219,39 @@ class _DailyCategoryChart extends StatelessWidget {
                       }
                       final day = dailyCategoryData[idx]['day'] as DateTime;
                       final isToday =
-                          DateTime.now().year == day.year &&
-                          DateTime.now().month == day.month &&
-                          DateTime.now().day == day.day;
+                          now.year == day.year &&
+                          now.month == day.month &&
+                          now.day == day.day;
+                      // #3: Today indicator with dot
                       return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          _dayLabels[day.weekday - 1],
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: isToday
-                                ? FontWeight.w800
-                                : FontWeight.w500,
-                            color: isToday
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${day.day}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isToday
+                                    ? FontWeight.w800
+                                    : FontWeight.w500,
+                                color: isToday
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            if (isToday) ...[
+                              const SizedBox(height: 2),
+                              Container(
+                                width: 5,
+                                height: 5,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       );
                     },
@@ -755,6 +1273,12 @@ class _DailyCategoryChart extends StatelessWidget {
               barGroups: List.generate(dailyCategoryData.length, (i) {
                 final catMap =
                     dailyCategoryData[i]['categories'] as Map<String, int>;
+                final day = dailyCategoryData[i]['day'] as DateTime;
+                final isToday =
+                    now.year == day.year &&
+                    now.month == day.month &&
+                    now.day == day.day;
+
                 // Build stacked rod data from categories
                 final rodStack = <BarChartRodStackItem>[];
                 double cumulative = 0;
@@ -766,7 +1290,7 @@ class _DailyCategoryChart extends StatelessWidget {
                     BarChartRodStackItem(
                       cumulative,
                       cumulative + hrs,
-                      _colorFor(cat),
+                      CategoryMeta.colorFor(cat),
                     ),
                   );
                   cumulative += hrs;
@@ -782,6 +1306,14 @@ class _DailyCategoryChart extends StatelessWidget {
                       ),
                       rodStackItems: rodStack,
                       color: Colors.transparent,
+                      // #3: Highlight today's bar background
+                      backDrawRodData: BackgroundBarChartRodData(
+                        show: isToday,
+                        toY: maxHrs * 1.2,
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.06,
+                        ),
+                      ),
                     ),
                   ],
                 );
@@ -790,12 +1322,12 @@ class _DailyCategoryChart extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        // Legend
+        // Legend — uses centralized CategoryMeta
         Wrap(
           spacing: 12,
           runSpacing: 6,
           children: categories.map((cat) {
-            final emoji = _categoryEmojis[cat] ?? '📌';
+            final emoji = CategoryMeta.emojiFor(cat);
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -803,7 +1335,7 @@ class _DailyCategoryChart extends StatelessWidget {
                   width: 10,
                   height: 10,
                   decoration: BoxDecoration(
-                    color: _colorFor(cat),
+                    color: CategoryMeta.colorFor(cat),
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
@@ -818,7 +1350,7 @@ class _DailyCategoryChart extends StatelessWidget {
   }
 }
 
-// ─── TimeValue Donut Chart ───────────────────────────────────────────────────
+// ─── #6: TimeValue Donut Chart (Enlarged) ────────────────────────────────────
 class _TimeValueDonut extends StatelessWidget {
   final Map<TimeValue, int> timeValueMinutes;
   final int totalMinutes;
@@ -841,7 +1373,7 @@ class _TimeValueDonut extends StatelessWidget {
           return PieChartSectionData(
             value: mins.toDouble(),
             color: tv.color,
-            radius: 40,
+            radius: 48, // #6: Increased from 40
             showTitle: (mins / totalMinutes * 100) >= 5,
             title: '${tv.emoji}\n$pct%',
             titleStyle: const TextStyle(
@@ -858,12 +1390,12 @@ class _TimeValueDonut extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 140,
-          height: 140,
+          width: 180, // #6: Increased from 140
+          height: 180, // #6: Increased from 140
           child: PieChart(
             PieChartData(
               sections: sections,
-              centerSpaceRadius: 28,
+              centerSpaceRadius: 40, // #6: Increased from 28
               sectionsSpace: 2,
             ),
           ),
@@ -872,11 +1404,10 @@ class _TimeValueDonut extends StatelessWidget {
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            // #14: Consistent duration formatting
             children: TimeValue.values.map((tv) {
               final mins = timeValueMinutes[tv] ?? 0;
               if (mins == 0) return const SizedBox.shrink();
-              final h = mins ~/ 60;
-              final m = mins % 60;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Row(
@@ -896,7 +1427,7 @@ class _TimeValueDonut extends StatelessWidget {
                     ),
                     const Spacer(),
                     Text(
-                      h > 0 ? '${h}j ${m}m' : '${m}m',
+                      CategoryMeta.formatDuration(mins),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -914,7 +1445,7 @@ class _TimeValueDonut extends StatelessWidget {
   }
 }
 
-// ─── Category Row ───────────────────────────────────────────────────────────
+// ─── #14: Category Row (Uses centralized formatting) ─────────────────────────
 class _CategoryRow extends StatelessWidget {
   final String emoji;
   final String name;
@@ -933,9 +1464,6 @@ class _CategoryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hours = minutes ~/ 60;
-    final mins = minutes % 60;
-    final label = hours > 0 ? '$hours jam $mins mnt' : '$mins mnt';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -948,7 +1476,7 @@ class _CategoryRow extends StatelessWidget {
             ),
             const Spacer(),
             Text(
-              label,
+              CategoryMeta.formatDurationLong(minutes),
               style: TextStyle(
                 fontSize: 12,
                 color: theme.colorScheme.onSurfaceVariant,

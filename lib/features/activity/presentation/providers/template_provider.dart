@@ -8,9 +8,9 @@ final templateBoxProvider = Provider<Box<ActivityTemplateModel>>((ref) {
 
 final templateListProvider =
     StateNotifierProvider<TemplateNotifier, List<ActivityTemplateModel>>((ref) {
-  final box = ref.watch(templateBoxProvider);
-  return TemplateNotifier(box);
-});
+      final box = ref.watch(templateBoxProvider);
+      return TemplateNotifier(box);
+    });
 
 class TemplateNotifier extends StateNotifier<List<ActivityTemplateModel>> {
   final Box<ActivityTemplateModel> box;
@@ -24,27 +24,6 @@ class TemplateNotifier extends StateNotifier<List<ActivityTemplateModel>> {
 
   static final _defaultTemplates = [
     ActivityTemplateModel(
-      name: 'Coding',
-      emoji: '💻',
-      category: 'Kerja',
-      timeValue: 'investasi',
-      isDefault: true,
-    ),
-    ActivityTemplateModel(
-      name: 'Meeting',
-      emoji: '📋',
-      category: 'Kerja',
-      timeValue: 'kebutuhan',
-      isDefault: true,
-    ),
-    ActivityTemplateModel(
-      name: 'Gawe',
-      emoji: '🔧',
-      category: 'Kerja',
-      timeValue: 'produktif',
-      isDefault: true,
-    ),
-    ActivityTemplateModel(
       name: 'Membaca',
       emoji: '📖',
       category: 'Belajar',
@@ -56,13 +35,6 @@ class TemplateNotifier extends StateNotifier<List<ActivityTemplateModel>> {
       emoji: '🎓',
       category: 'Belajar',
       timeValue: 'investasi',
-      isDefault: true,
-    ),
-    ActivityTemplateModel(
-      name: 'Lari',
-      emoji: '🏃',
-      category: 'Olahraga',
-      timeValue: 'produktif',
       isDefault: true,
     ),
     ActivityTemplateModel(
@@ -79,33 +51,13 @@ class TemplateNotifier extends StateNotifier<List<ActivityTemplateModel>> {
       timeValue: 'kebutuhan',
       isDefault: true,
     ),
-    ActivityTemplateModel(
-      name: 'Kerkom',
-      emoji: '👥',
-      category: 'Sosial',
-      timeValue: 'kebutuhan',
-      isDefault: true,
-    ),
-    ActivityTemplateModel(
-      name: 'Organisasi',
-      emoji: '🏛',
-      category: 'Sosial',
-      timeValue: 'investasi',
-      isDefault: true,
-    ),
-    ActivityTemplateModel(
-      name: 'Sholat',
-      emoji: '🕌',
-      category: 'Ibadah',
-      timeValue: 'investasi',
-      isDefault: true,
-    ),
   ];
 
   /// Seeds defaults on first launch, or migrates when version changes.
   void _migrateDefaults() {
     final settingsBox = Hive.box('settings');
-    final storedVersion = settingsBox.get(_defaultsVersionKey, defaultValue: 0) as int;
+    final storedVersion =
+        settingsBox.get(_defaultsVersionKey, defaultValue: 0) as int;
 
     if (box.isEmpty) {
       for (final t in _defaultTemplates) {
@@ -160,13 +112,15 @@ class TemplateNotifier extends StateNotifier<List<ActivityTemplateModel>> {
     required String category,
     required String timeValue,
   }) async {
-    await box.add(ActivityTemplateModel(
-      name: name,
-      emoji: emoji,
-      category: category,
-      timeValue: timeValue,
-      isDefault: false,
-    ));
+    await box.add(
+      ActivityTemplateModel(
+        name: name,
+        emoji: emoji,
+        category: category,
+        timeValue: timeValue,
+        isDefault: false,
+      ),
+    );
     loadTemplates();
   }
 

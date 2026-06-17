@@ -2,18 +2,18 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:catat_in/core/services/notification_service.dart';
+import 'package:catat_in/features/activity/data/models/activity_model.dart';
 import 'package:catat_in/features/activity/presentation/pages/template_page.dart';
 import 'package:catat_in/features/activity/presentation/providers/activity_provider.dart';
 import 'package:catat_in/features/activity/presentation/widgets/catat_in_app_bar.dart';
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:csv/csv.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:catat_in/features/activity/data/models/activity_model.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -29,9 +29,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    _dailyReminderEnabled = Hive.box('settings').get('daily_reminder', defaultValue: false);
-    final hour = Hive.box('settings').get('daily_reminder_hour', defaultValue: 20);
-    final minute = Hive.box('settings').get('daily_reminder_minute', defaultValue: 0);
+    _dailyReminderEnabled = Hive.box(
+      'settings',
+    ).get('daily_reminder', defaultValue: false);
+    final hour = Hive.box(
+      'settings',
+    ).get('daily_reminder_hour', defaultValue: 20);
+    final minute = Hive.box(
+      'settings',
+    ).get('daily_reminder_minute', defaultValue: 0);
     _reminderTime = TimeOfDay(hour: hour, minute: minute);
   }
 
@@ -64,15 +70,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   Text(
                     'Pengaturan Aplikasi',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Atur tampilan, notifikasi, dan data aktivitas agar sesuai dengan gaya kerja Anda.',
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -81,7 +85,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _SettingsSection(
               title: 'Preferensi',
               children: [
-
                 _SettingsTile(
                   icon: Icons.bolt_rounded,
                   title: 'Kelola Template',
@@ -105,17 +108,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Hive.box('settings').put('daily_reminder', value);
 
                     if (value) {
-                      await NotificationService.scheduleDailyReminder(_reminderTime.hour, _reminderTime.minute);
+                      await NotificationService.scheduleDailyReminder(
+                        _reminderTime.hour,
+                        _reminderTime.minute,
+                      );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Reminder harian diaktifkan pada ${_reminderTime.hour.toString().padLeft(2, '0')}:${_reminderTime.minute.toString().padLeft(2, '0')}.')),
+                          SnackBar(
+                            content: Text(
+                              'Reminder harian diaktifkan pada ${_reminderTime.hour.toString().padLeft(2, '0')}:${_reminderTime.minute.toString().padLeft(2, '0')}.',
+                            ),
+                          ),
                         );
                       }
                     } else {
                       await NotificationService.cancelDailyReminder();
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Reminder harian dinonaktifkan.')),
+                          const SnackBar(
+                            content: Text('Reminder harian dinonaktifkan.'),
+                          ),
                         );
                       }
                     }
@@ -125,7 +137,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   _SettingsTile(
                     icon: Icons.schedule_rounded,
                     title: 'Waktu Pengingat',
-                    subtitle: 'Berbunyi setiap pukul ${_reminderTime.hour.toString().padLeft(2, '0')}:${_reminderTime.minute.toString().padLeft(2, '0')}',
+                    subtitle:
+                        'Berbunyi setiap pukul ${_reminderTime.hour.toString().padLeft(2, '0')}:${_reminderTime.minute.toString().padLeft(2, '0')}',
                     onTap: () async {
                       final picked = await showTimePicker(
                         context: context,
@@ -135,12 +148,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         setState(() {
                           _reminderTime = picked;
                         });
-                        Hive.box('settings').put('daily_reminder_hour', picked.hour);
-                        Hive.box('settings').put('daily_reminder_minute', picked.minute);
-                        await NotificationService.scheduleDailyReminder(picked.hour, picked.minute);
+                        Hive.box(
+                          'settings',
+                        ).put('daily_reminder_hour', picked.hour);
+                        Hive.box(
+                          'settings',
+                        ).put('daily_reminder_minute', picked.minute);
+                        await NotificationService.scheduleDailyReminder(
+                          picked.hour,
+                          picked.minute,
+                        );
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Waktu pengingat diubah ke ${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}.')),
+                            SnackBar(
+                              content: Text(
+                                'Waktu pengingat diubah ke ${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}.',
+                              ),
+                            ),
                           );
                         }
                       }
@@ -169,6 +193,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
             const SizedBox(height: 16),
             _SettingsSection(
+              title: 'Dukungan',
+              children: [
+                _SettingsTile(
+                  icon: Icons.favorite_rounded,
+                  title: 'Donasi',
+                  subtitle: 'Dukung pengembangan Catat-In',
+                  onTap: () => _showDonationSheet(context),
+                ),
+                _SettingsTile(
+                  icon: Icons.share_rounded,
+                  title: 'Bagikan Aplikasi',
+                  subtitle: 'Ajak temanmu pakai Catat-In',
+                  onTap: () {
+                    Share.share(
+                      'Coba Catat-In — aplikasi pencatat waktu yang bikin kamu lebih produktif! 🚀\n\nhttps://play.google.com/store/apps/details?id=com.lputaa.catatin',
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _SettingsSection(
               title: 'Lainnya',
               children: [
                 _SettingsTile(
@@ -178,25 +224,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   onTap: () async {
                     String? encodeQueryParameters(Map<String, String> params) {
                       return params.entries
-                          .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+                          .map(
+                            (e) =>
+                                '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+                          )
                           .join('&');
                     }
-                    
+
                     final Uri emailLaunchUri = Uri(
                       scheme: 'mailto',
                       path: 'laputaa2429@gmail.com',
                       query: encodeQueryParameters(<String, String>{
                         'subject': '[Catat-In] Masukan & Saran',
-                        'body': 'Halo developer Catat-In,\n\nSaya ingin menyampaikan feedback berikut:\n\n',
+                        'body':
+                            'Halo developer Catat-In,\n\nSaya ingin menyampaikan feedback berikut:\n\n',
                       }),
                     );
-                    
-                    if (await canLaunchUrl(emailLaunchUri)) {
-                      await launchUrl(emailLaunchUri);
-                    } else {
+
+                    try {
+                      await launchUrl(
+                        emailLaunchUri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Tidak dapat membuka aplikasi email.')),
+                          const SnackBar(
+                            content: Text(
+                              'Tidak dapat membuka aplikasi email.',
+                            ),
+                          ),
                         );
                       }
                     }
@@ -218,11 +275,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             FilledButton(
                               onPressed: () async {
                                 await box.clear();
-                                ref.read(activityListProvider.notifier).loadActivities();
+                                ref
+                                    .read(activityListProvider.notifier)
+                                    .loadActivities();
                                 if (context.mounted) {
                                   Navigator.pop(dialogContext);
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Semua data aktivitas berhasil dihapus.')),
+                                    const SnackBar(
+                                      content: Text(
+                                        'Semua data aktivitas berhasil dihapus.',
+                                      ),
+                                    ),
                                   );
                                 }
                               },
@@ -244,7 +307,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     icon: Icon(Icons.info_outline),
                     applicationName: 'Catat-In',
                     applicationVersion: '1.0.0',
-                    applicationLegalese: '© 2026',
+                    applicationLegalese: 'Laputaa © 2026',
                   ),
                 ),
               ],
@@ -253,6 +316,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ),
     );
+  }
+
+  /// Checks if an activity with the same name and start time already exists.
+  bool _isDuplicate(Box<ActivityModel> box, String name, DateTime? startAt) {
+    for (var i = 0; i < box.length; i++) {
+      final existing = box.getAt(i);
+      if (existing == null) continue;
+      if (existing.name == name && existing.startAt == startAt) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _showExportOptions(BuildContext context, List<dynamic> activities) {
@@ -264,19 +339,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Export Data',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              'Export Data',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 4),
-            Text('${activities.length} aktivitas akan diekspor',
-                style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            Text(
+              '${activities.length} aktivitas akan diekspor',
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 16),
             _ExportOptionTile(
               icon: Icons.calendar_month_rounded,
               color: Colors.blue,
               title: 'ICS (Google Calendar)',
-              subtitle: 'Format kalender — bisa diimpor ke Google Calendar, Outlook, dll',
+              subtitle:
+                  'Format kalender — bisa diimpor ke Google Calendar, Outlook, dll',
               onTap: () async {
                 Navigator.pop(ctx);
                 final file = await _writeICSFile(activities);
@@ -293,10 +374,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               icon: Icons.table_chart_rounded,
               color: Colors.green,
               title: 'CSV (Spreadsheet)',
-              subtitle: 'Format tabel — bisa dibuka di Excel, Google Sheets, dll',
+              subtitle:
+                  'Format tabel — bisa dibuka di Excel, Google Sheets, dll',
               onTap: () async {
                 Navigator.pop(ctx);
                 final file = await _writeCSVFile(activities);
+                if (context.mounted) {
+                  await Share.shareXFiles(
+                    [XFile(file.path)],
+                    text: 'Aktivitas Catat-In (${activities.length} kegiatan)',
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            _ExportOptionTile(
+              icon: Icons.code_rounded,
+              color: Colors.orange,
+              title: 'JSON (Developer)',
+              subtitle: 'Format data mentah — untuk backup atau integrasi API',
+              onTap: () async {
+                Navigator.pop(ctx);
+                final file = await _writeExportFile(activities, 'export');
                 if (context.mounted) {
                   await Share.shareXFiles(
                     [XFile(file.path)],
@@ -313,22 +412,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<File> _writeExportFile(List<dynamic> activities, String kind) async {
     final directory = await getApplicationDocumentsDirectory();
-    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+    final timestamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .replaceAll('.', '-');
     final file = File('${directory.path}/catat_in_${kind}_$timestamp.json');
 
     final payload = {
       'exportedAt': DateTime.now().toIso8601String(),
       'count': activities.length,
-      'activities': activities.map((activity) => {
-        'name': activity.name,
-        'isProductive': activity.isProductive,
-        'timeValue': activity.timeValue,
-        'createdAt': activity.createdAt.toIso8601String(),
-        'category': activity.category,
-        'startAt': activity.startAt?.toIso8601String(),
-        'endAt': activity.endAt?.toIso8601String(),
-        'isRunning': activity.isRunning,
-      }).toList(),
+      'activities': activities
+          .map(
+            (activity) => {
+              'name': activity.name,
+              'isProductive': activity.isProductive,
+              'timeValue': activity.timeValue,
+              'createdAt': activity.createdAt.toIso8601String(),
+              'category': activity.category,
+              'startAt': activity.startAt?.toIso8601String(),
+              'endAt': activity.endAt?.toIso8601String(),
+              'isRunning': activity.isRunning,
+              'notes': activity.notes,
+              'templateName': activity.templateName,
+            },
+          )
+          .toList(),
     };
 
     await file.writeAsString(jsonEncode(payload));
@@ -354,7 +462,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final buffer = StringBuffer();
     // Header
     buffer.writeln(
-        'Nama,Kategori,Nilai Waktu,Mulai,Selesai,Durasi (menit),Catatan');
+      'Nama,Kategori,Nilai Waktu,Mulai,Selesai,Durasi (menit),Catatan',
+    );
 
     for (final activity in activities) {
       final startAt = activity.startAt as DateTime?;
@@ -364,15 +473,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           : '';
       final notes = (activity.notes ?? '') as String;
 
-      buffer.writeln([
-        escapeCSV(activity.name),
-        escapeCSV(activity.category),
-        escapeCSV(activity.timeValue),
-        startAt?.toIso8601String() ?? '',
-        endAt?.toIso8601String() ?? '',
-        duration.toString(),
-        escapeCSV(notes),
-      ].join(','));
+      buffer.writeln(
+        [
+          escapeCSV(activity.name),
+          escapeCSV(activity.category),
+          escapeCSV(activity.timeValue),
+          startAt?.toIso8601String() ?? '',
+          endAt?.toIso8601String() ?? '',
+          duration.toString(),
+          escapeCSV(notes),
+        ].join(','),
+      );
     }
 
     await file.writeAsString(buffer.toString());
@@ -422,7 +533,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final endAt = activity.endAt as DateTime?;
       if (startAt == null || endAt == null) continue;
 
-      final uid = '${activity.createdAt.millisecondsSinceEpoch}'
+      final uid =
+          '${activity.createdAt.millisecondsSinceEpoch}'
           '${activity.name.hashCode}@catatin.app';
       final now = formatDt(DateTime.now());
 
@@ -473,37 +585,54 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         final data = jsonDecode(content);
         final activitiesList = data['activities'] as List;
         for (final item in activitiesList) {
+          // Duplicate check: skip if same name + startAt already exists
+          final startAt = item['startAt'] != null
+              ? DateTime.parse(item['startAt'])
+              : null;
+          final name = item['name'] as String;
+          if (_isDuplicate(box, name, startAt)) continue;
+
           final activity = ActivityModel(
-            name: item['name'],
+            name: name,
             createdAt: DateTime.parse(item['createdAt']),
             category: item['category'],
-            startAt: item['startAt'] != null ? DateTime.parse(item['startAt']) : null,
+            startAt: startAt,
             endAt: item['endAt'] != null ? DateTime.parse(item['endAt']) : null,
             isRunning: item['isRunning'] ?? false,
             timeValue: item['timeValue'],
+            notes: item['notes'],
+            templateName: item['templateName'],
           );
           await box.add(activity);
           importedCount++;
         }
       } else if (extension == 'csv') {
-        final List<List<dynamic>> rowsAsListOfValues = const CsvToListConverter().convert(content);
+        final List<List<dynamic>> rowsAsListOfValues =
+            const CsvToListConverter().convert(content);
         if (rowsAsListOfValues.isNotEmpty) {
           for (int i = 1; i < rowsAsListOfValues.length; i++) {
             final row = rowsAsListOfValues[i];
-            if (row.length >= 3) {
+            if (row.length >= 5) {
               final name = row[0].toString();
               final category = row[1].toString();
               final timeValue = row[2].toString();
-              final startAtStr = row.length > 3 ? row[3].toString() : '';
-              final endAtStr = row.length > 4 ? row[4].toString() : '';
+              final startAtStr = row[3].toString();
+              final endAtStr = row[4].toString();
               final notes = row.length > 6 ? row[6].toString() : '';
+
+              final parsedStart = startAtStr.isNotEmpty
+                  ? DateTime.tryParse(startAtStr)
+                  : null;
+
+              // Duplicate check
+              if (_isDuplicate(box, name, parsedStart)) continue;
 
               final activity = ActivityModel(
                 name: name,
-                createdAt: DateTime.now(),
+                createdAt: parsedStart ?? DateTime.now(),
                 category: category,
                 timeValue: timeValue.isNotEmpty ? timeValue : 'kebutuhan',
-                startAt: startAtStr.isNotEmpty ? DateTime.tryParse(startAtStr) : null,
+                startAt: parsedStart,
                 endAt: endAtStr.isNotEmpty ? DateTime.tryParse(endAtStr) : null,
                 notes: notes.isNotEmpty ? notes : null,
               );
@@ -513,13 +642,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           }
         }
       } else if (extension == 'ics') {
-        final lines = content.split('\n');
+        // Normalize line endings (ICS files may use \r\n from Windows/Outlook)
+        final normalizedContent = content
+            .replaceAll('\r\n', '\n')
+            .replaceAll('\r', '\n');
+        final lines = normalizedContent.split('\n');
         String? currentSummary;
         String? currentCategory;
         DateTime? currentStart;
         DateTime? currentEnd;
         String? currentDescription;
-        
+
         for (String line in lines) {
           line = line.trim();
           if (line == 'BEGIN:VEVENT') {
@@ -529,19 +662,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             currentEnd = null;
             currentDescription = null;
           } else if (line.startsWith('SUMMARY:')) {
-            currentSummary = line.substring(8).replaceAll('\\,', ',').replaceAll('\\;', ';');
+            currentSummary = line
+                .substring(8)
+                .replaceAll('\\,', ',')
+                .replaceAll('\\;', ';');
           } else if (line.startsWith('CATEGORIES:')) {
             currentCategory = line.substring(11);
           } else if (line.startsWith('DTSTART:')) {
             final dtStr = line.substring(8);
             if (dtStr.length >= 15) {
-              final formatted = '${dtStr.substring(0,4)}-${dtStr.substring(4,6)}-${dtStr.substring(6,8)}T${dtStr.substring(9,11)}:${dtStr.substring(11,13)}:${dtStr.substring(13,15)}Z';
+              final formatted =
+                  '${dtStr.substring(0, 4)}-${dtStr.substring(4, 6)}-${dtStr.substring(6, 8)}T${dtStr.substring(9, 11)}:${dtStr.substring(11, 13)}:${dtStr.substring(13, 15)}Z';
               currentStart = DateTime.tryParse(formatted)?.toLocal();
             }
           } else if (line.startsWith('DTEND:')) {
             final dtStr = line.substring(6);
             if (dtStr.length >= 15) {
-              final formatted = '${dtStr.substring(0,4)}-${dtStr.substring(4,6)}-${dtStr.substring(6,8)}T${dtStr.substring(9,11)}:${dtStr.substring(11,13)}:${dtStr.substring(13,15)}Z';
+              final formatted =
+                  '${dtStr.substring(0, 4)}-${dtStr.substring(4, 6)}-${dtStr.substring(6, 8)}T${dtStr.substring(9, 11)}:${dtStr.substring(11, 13)}:${dtStr.substring(13, 15)}Z';
               currentEnd = DateTime.tryParse(formatted)?.toLocal();
             }
           } else if (line.startsWith('DESCRIPTION:')) {
@@ -560,9 +698,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   }
                 }
               }
+              // Duplicate check
+              if (_isDuplicate(box, currentSummary, currentStart)) continue;
+
               final activity = ActivityModel(
                 name: currentSummary,
-                createdAt: DateTime.now(),
+                createdAt: currentStart ?? DateTime.now(),
                 category: currentCategory ?? 'Lainnya',
                 startAt: currentStart,
                 endAt: currentEnd,
@@ -580,16 +721,82 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Berhasil mengimpor $importedCount aktivitas')),
+          SnackBar(
+            content: Text('Berhasil mengimpor $importedCount aktivitas'),
+          ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal mengimpor file: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal mengimpor file: $e')));
       }
     }
+  }
+
+  void _showDonationSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Dukung Pengembangan',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Aplikasi ini dibuat gratis dan tanpa iklan. Dukungan Anda sangat berarti untuk server dan pengembangan fitur selanjutnya.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 24),
+            _ExportOptionTile(
+              icon: Icons.coffee_rounded,
+              color: Colors.orange,
+              title: 'Trakteer',
+              subtitle: 'Dukung kreator dengan mentraktir',
+              onTap: () async {
+                Navigator.pop(ctx);
+                final uri = Uri.parse('https://trakteer.id/');
+                if (await canLaunchUrl(uri)) await launchUrl(uri);
+              },
+            ),
+            const SizedBox(height: 8),
+            _ExportOptionTile(
+              icon: Icons.favorite_rounded,
+              color: Colors.pink,
+              title: 'Saweria',
+              subtitle: 'Dukungan via dompet digital',
+              onTap: () async {
+                Navigator.pop(ctx);
+                final uri = Uri.parse('https://saweria.co/');
+                if (await canLaunchUrl(uri)) await launchUrl(uri);
+              },
+            ),
+            const SizedBox(height: 8),
+            _ExportOptionTile(
+              icon: Icons.local_cafe_rounded,
+              color: Colors.blue,
+              title: 'Ko-fi',
+              subtitle: 'Buy me a coffee',
+              onTap: () async {
+                Navigator.pop(ctx);
+                final uri = Uri.parse('https://ko-fi.com/');
+                if (await canLaunchUrl(uri)) await launchUrl(uri);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -676,7 +883,10 @@ class _DangerSettingsTile extends StatelessWidget {
           backgroundColor: Colors.red.withValues(alpha: 0.12),
           child: const Icon(Icons.delete_outline, color: Colors.red),
         ),
-        title: const Text('Reset Semua Data', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+        title: const Text(
+          'Reset Semua Data',
+          style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+        ),
         subtitle: const Text('Hapus semua data aktivitas yang tersimpan.'),
         trailing: const Icon(Icons.chevron_right_rounded, color: Colors.red),
         onTap: onTap,
@@ -754,7 +964,8 @@ class _ExportOptionTile extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 44, height: 44,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
@@ -767,19 +978,28 @@ class _ExportOptionTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600)),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(subtitle,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ],
           ),
         ),

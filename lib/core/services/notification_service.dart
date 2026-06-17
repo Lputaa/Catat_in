@@ -17,7 +17,7 @@ class NotificationService {
 
     const androidSettings =
         AndroidInitializationSettings(
-          '@mipmap/ic_launcher',
+          '@mipmap/launcher_icon',
         );
 
     const settings =
@@ -146,27 +146,31 @@ class NotificationService {
     String name,
     String emoji,
   ) async {
-    const androidDetails = AndroidNotificationDetails(
-      'tracking_channel',
-      'Tracking Aktivitas',
-      channelDescription: 'Notifikasi saat tracking berjalan',
-      icon: '@drawable/notification_icon',
-      importance: Importance.high,
-      priority: Priority.high,
-      autoCancel: true,
-      playSound: true,
-    );
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'tracking_channel',
+        'Tracking Aktivitas',
+        channelDescription: 'Notifikasi saat tracking berjalan',
+        icon: '@drawable/notification_icon',
+        importance: Importance.high,
+        priority: Priority.high,
+        autoCancel: true,
+        playSound: true,
+      );
 
-    const details = NotificationDetails(android: androidDetails);
+      const details = NotificationDetails(android: androidDetails);
 
-    await _notifications.show(
-      _trackingNotificationId,
-      '$emoji $name dimulai',
-      'Tracking sedang berjalan. Ketuk untuk membuka app.',
-      details,
-    );
+      await _notifications.show(
+        _trackingNotificationId,
+        '$emoji $name dimulai',
+        'Tracking sedang berjalan. Ketuk untuk membuka app.',
+        details,
+      );
 
-    debugPrint('TRACKING NOTIFICATION SHOWN: $emoji $name');
+      debugPrint('TRACKING NOTIFICATION SHOWN: $emoji $name');
+    } catch (e) {
+      debugPrint('showTrackingNotification error: $e');
+    }
   }
 
   /// Cancel the ongoing tracking notification and show a "saved" notification.
@@ -174,35 +178,43 @@ class NotificationService {
     String name,
     String emoji,
   ) async {
-    // Cancel the ongoing notification
-    await _notifications.cancel(_trackingNotificationId);
+    try {
+      // Cancel the ongoing notification
+      await _notifications.cancel(_trackingNotificationId);
 
-    // Show a brief "saved" notification (dismissible by user)
-    const androidDetails = AndroidNotificationDetails(
-      'tracking_channel',
-      'Tracking Aktivitas',
-      channelDescription: 'Notifikasi saat tracking berjalan',
-      icon: '@drawable/notification_icon',
-      importance: Importance.high,
-      priority: Priority.high,
-      autoCancel: true,
-      playSound: true,
-    );
+      // Show a brief "saved" notification (dismissible by user)
+      const androidDetails = AndroidNotificationDetails(
+        'tracking_channel',
+        'Tracking Aktivitas',
+        channelDescription: 'Notifikasi saat tracking berjalan',
+        icon: '@drawable/notification_icon',
+        importance: Importance.high,
+        priority: Priority.high,
+        autoCancel: true,
+        playSound: true,
+      );
 
-    const details = NotificationDetails(android: androidDetails);
+      const details = NotificationDetails(android: androidDetails);
 
-    await _notifications.show(
-      _trackingNotificationId + 1,
-      '$emoji $name tersimpan!',
-      'Aktivitas berhasil dicatat.',
-      details,
-    );
+      await _notifications.show(
+        _trackingNotificationId + 1,
+        '$emoji $name tersimpan!',
+        'Aktivitas berhasil dicatat.',
+        details,
+      );
 
-    debugPrint('FINISH NOTIFICATION SHOWN: $emoji $name');
+      debugPrint('FINISH NOTIFICATION SHOWN: $emoji $name');
+    } catch (e) {
+      debugPrint('finishTrackingNotification error: $e');
+    }
   }
 
   /// Cancel the tracking notification without showing a saved notification.
   static Future<void> cancelTrackingNotification() async {
-    await _notifications.cancel(_trackingNotificationId);
+    try {
+      await _notifications.cancel(_trackingNotificationId);
+    } catch (e) {
+      debugPrint('cancelTrackingNotification error: $e');
+    }
   }
 }
